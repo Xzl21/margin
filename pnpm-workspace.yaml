@@ -1,0 +1,10 @@
+packages:
+  - .
+
+nodeLinker: hoisted
+publicHoistPattern:
+  - '*'
+hoistPattern:
+  - '*'
+ignoredBuiltDependencies:
+  - esbuild

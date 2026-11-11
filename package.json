@@ -1,0 +1,41 @@
+{
+  "name": "margin-reader",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "伴读 Margin — 本地优先的学习型文档阅读器",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "serve": "node server/serve.mjs",
+    "mock": "node scripts/mock-llm.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "dexie": "^4.0.11",
+    "dompurify": "^3.2.6",
+    "mammoth": "^1.9.1",
+    "markdown-it": "^14.1.0",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "fake-indexeddb": "^6.2.8",
+    "happy-dom": "^21.0.4",
+    "lightningcss": "^1.33.0",
+    "picomatch": "^4.0.7",
+    "postcss": "^8.5.32",
+    "rolldown": "^1.2.19",
+    "tinyglobby": "^0.2.17",
+    "typescript": "^5.8.3",
+    "vite": "^8.3.8"
+  }
+}
