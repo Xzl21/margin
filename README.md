@@ -48,45 +48,6 @@ pnpm serve    # 托管 dist/ 并提供 /api/proxy 转发，默认 http://127.0.0
 
 Ollama 等本地模型把 BaseURL 指向 `http://127.0.0.1:11434/v1`，不需要 Key。
 
-## 配置联网查证（可选）
-
-「查证」需要一个检索服务（与模型 Key 分开）：
-
-1. 打开「设置 → 联网」，选择服务：Tavily、Brave Search、Serper，或自建的 SearXNG；
-2. 填 API Key（SearXNG 填实例地址，例如 `https://searx.be`，免费、不限量）；
-3. 点「测试检索」确认能返回结果。
-
-检索接口不允许浏览器直连，默认经 `/api/proxy` 转发。查证时选中的句子会发给检索服务；介意的话自建 SearXNG。
-
-## 部署
-
-### Cloudflare Pages（推荐）
-
-1. 把本仓库推到 GitHub；
-2. Cloudflare Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**，选择仓库；
-3. 构建设置：
-   - Build command：`pnpm build`
-   - Build output directory：`dist`
-   - 环境变量：`NODE_VERSION=22`
-4. 保存并部署，得到 `https://<项目名>.pages.dev`。
-
-仓库里的 `functions/api/proxy.js` 会被自动识别为 Pages Function，因此 `/api/proxy` 直接可用，不需要额外服务。之后每次 `git push` 都会自动重新构建。
-
-### 自托管
-
-静态文件 + Node 转发：
-
-```bash
-pnpm build
-pnpm serve --port 8787
-```
-
-也可以只把 `dist/` 放到任意静态托管（Nginx、Vercel、Netlify），再自行提供一个等价的 `/api/proxy` 转发接口；没有转发时，在设置里关掉「经本地转发」，但多数厂商不允许浏览器直连。
-
-### 访问者的 Key 与费用
-
-- 每个访客的 Key 存在他自己的浏览器 IndexedDB 里，不上传、不进仓库；`/api/proxy` 只透传，不保存 Key。因此别人打开网页用的是他们自己的额度。
-- 如果想让朋友免配 Key、直接使用部署者的额度，需要把 Key 放到服务端。可参考 `deploy/cloudflare-worker-key.js`（Worker + 环境变量 + 来源白名单 + 每日限额）。这等于公开自己的额度，请自行评估成本与滥用风险。
 
 ## 数据与隐私
 
