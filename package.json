@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "margin-reader",
   "private": true,
   "version": "1.0.0",
@@ -7,7 +7,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "preview": "vite preview",
     "serve": "node server/serve.mjs",
     "mock": "node scripts/mock-llm.mjs",
