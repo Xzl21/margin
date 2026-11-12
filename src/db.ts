@@ -2,7 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import type {
   AiMsg, Anchor, Block, CacheRow, Doc, Note, Settings, Stuck,
 } from './types'
-import { defaultSettings } from './ai/presets'
+import { defaultSettings, upgradeLegacyModels } from './ai/presets'
 
 export class MarginDB extends Dexie {
   docs!: Table<Doc, string>
@@ -37,7 +37,7 @@ export async function loadSettings(): Promise<Settings | undefined> {
   // 旧版本存下来的设置可能缺字段（例如后加的 search），合并一次默认值
   const base = defaultSettings()
   const stored = row.value as Partial<Settings>
-  return {
+  const merged: Settings = {
     ...base,
     ...stored,
     providers: stored.providers?.length ? stored.providers : base.providers,
@@ -48,6 +48,7 @@ export async function loadSettings(): Promise<Settings | undefined> {
       providers: stored.search?.providers?.length ? stored.search.providers : base.search.providers,
     },
   }
+  return upgradeLegacyModels(merged)
 }
 
 export async function saveSettings(s: Settings): Promise<void> {

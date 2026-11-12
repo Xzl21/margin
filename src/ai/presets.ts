@@ -13,7 +13,7 @@ export const PROVIDER_PRESETS: ProviderConfig[] = [
     name: 'DeepSeek',
     baseURL: 'https://api.deepseek.com/v1',
     apiKey: '',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
+    models: ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-v4-flash'],
     proxy: true,
   },
   {
@@ -68,7 +68,7 @@ export const PROVIDER_PRESETS: ProviderConfig[] = [
 
 export function defaultSettings(): Settings {
   const providers = PROVIDER_PRESETS.map((p) => ({ ...p, models: [...p.models] }))
-  const route = { providerId: 'deepseek', model: 'deepseek-chat' }
+  const route = { providerId: 'deepseek', model: 'deepseek-flash' }
   return {
     providers,
     routing: {
@@ -112,4 +112,29 @@ export function searchReady(settings: Settings): boolean {
   if (!provider) return false
   if (provider.kind === 'searxng') return Boolean(provider.endpoint?.trim())
   return provider.apiKey.trim().length > 8
+}
+
+/**
+ * DeepSeek 官方 2026-07-24 停用了 deepseek-chat / deepseek-reasoner，
+ * 旧版本存在浏览器里的配置需要平滑迁到新模型名，否则一打开就调用失败。
+ */
+export const LEGACY_DEEPSEEK_MODELS: Record<string, string> = {
+  'deepseek-chat': 'deepseek-flash',
+  'deepseek-reasoner': 'deepseek-v4-pro',
+}
+
+export function upgradeLegacyModels(settings: Settings): Settings {
+  const routing = { ...settings.routing }
+  for (const task of Object.keys(routing) as (keyof Settings['routing'])[]) {
+    const route = routing[task]
+    const next = LEGACY_DEEPSEEK_MODELS[route.model]
+    if (next) routing[task] = { ...route, model: next }
+  }
+  const providers = settings.providers.map((p) => {
+    if (p.id !== 'deepseek') return p
+    const renamed = p.models.map((m) => LEGACY_DEEPSEEK_MODELS[m] ?? m)
+    const models = [...new Set([...renamed, 'deepseek-flash', 'deepseek-v4-pro'])]
+    return { ...p, models }
+  })
+  return { ...settings, routing, providers }
 }

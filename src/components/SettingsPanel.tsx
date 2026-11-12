@@ -163,7 +163,7 @@ export function SettingsPanel() {
               <section>
                 <h3>任务用哪个模型</h3>
                 <p className="section-hint">
-                  四个任务可以各用各的模型。便宜的模型（如 deepseek-chat、qwen-flash）做解释足够；骨架和点评可以用更强的。
+                  四个任务可以各用各的模型。便宜的模型（如 deepseek-flash、qwen-flash）做解释足够；骨架和点评可以用更强的。
                 </p>
                 <div className="route-grid">
                   {(Object.keys(TASK_LABEL) as TaskKey[]).map((key) => {
