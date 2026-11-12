@@ -126,6 +126,9 @@ try {
     await wait(2000)
     const blocks = doc.querySelectorAll('.blk').length
     check('reader renders blocks', blocks > 3, `blocks=${blocks}`)
+    const rows = doc.querySelectorAll('.blk-row').length
+    check('blocks wrapped in rows', rows >= blocks, `rows=${rows} blocks=${blocks}`)
+    check('panel resizer present', Boolean(doc.querySelector('.panel-resizer')))
     check('outline rendered', doc.querySelectorAll('.outline-item, .outline li, .panel-outline li, .toc-item').length > 0)
     const head = doc.querySelector('.reader-head')
     check('reader header present', Boolean(head), (head?.textContent ?? '').replace(/\s+/g, ' ').slice(0, 80))
