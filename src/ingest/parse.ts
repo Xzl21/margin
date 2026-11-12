@@ -47,7 +47,10 @@ export async function parseFile(file: File): Promise<ParsedDoc> {
   const baseTitle = file.name.replace(/\.[^.]+$/, '')
 
   if (kind === 'pdf') {
-    const parsed = await parsePdf(new Uint8Array(buffer), docId)
+    // pdf.js 会把这块内存交给 worker（transfer），移交后原 buffer 失效。
+    // 所以给引擎一份副本，原始 buffer 留着存库，否则 new Blob(...) 会抛
+    // "Cannot perform Construct on a detached ArrayBuffer"，文档就会显示空白。
+    const parsed = await parsePdf(new Uint8Array(buffer.slice(0)), docId)
     return {
       kind,
       title: baseTitle,

@@ -45,6 +45,22 @@ interface AppStore {
 
 let frontierTimer: number | undefined
 
+// 把底层英文异常翻成用户能行动的中文提示。
+function importErrorMessage(err: unknown, name: string): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  if (/detached|ArrayBuffer/i.test(raw)) {
+    return `「${name}」在读文件时被浏览器打断，请再导入一次。`
+  }
+  if (/password/i.test(raw)) {
+    return `「${name}」有密码保护，先另存一份无密码的 PDF 再导入。`
+  }
+  if (/InvalidPDF|Invalid PDF|Missing PDF|Invalid argument/i.test(raw)) {
+    return `「${name}」不是有效的 PDF，文件可能已损坏。`
+  }
+  if (/OCR|扫描/i.test(raw)) return raw
+  return `「${name}」导入失败：${raw}`
+}
+
 export const useApp = create<AppStore>()((set, get) => ({
   ready: false,
   busy: null,
@@ -76,6 +92,11 @@ export const useApp = create<AppStore>()((set, get) => ({
       set({ busy: `正在解析 ${file.name}…`, error: null })
       try {
         const parsed = await parseFile(file)
+        if (!parsed.blocks.length) {
+          throw new Error(
+            `「${file.name}」里没有可读文字，可能是扫描件。先用 OCR 转成带文字层的 PDF，或把正文复制成 Markdown/TXT 再导入。`,
+          )
+        }
         const existing = await db.docs.get(parsed.hash.slice(0, 16))
         if (existing) {
           await get().openDoc(existing.id)
@@ -103,7 +124,7 @@ export const useApp = create<AppStore>()((set, get) => ({
         await get().refreshDocs()
         await get().openDoc(doc.id)
       } catch (err) {
-        set({ error: err instanceof Error ? err.message : String(err) })
+        set({ error: importErrorMessage(err, file.name) })
       }
     }
     set({ busy: null })
