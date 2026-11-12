@@ -7,7 +7,6 @@ import { longestCommonSubstring, normalizeSpace } from './util'
  */
 export type HighlightTone =
   | 'note'
-  | 'stuck'
   | 'ai'
   | 'mark'
   | 'verify-ok'

@@ -76,6 +76,39 @@ export function explainMessages(input: {
   ]
 }
 
+const CONCEPT_SYSTEM = `你是「伴读」的概念解释器。读者选中了一个词或一句话，想知道它到底是什么意思。
+
+必须遵守：
+1. 只依据我给的【上文】与【所在段落】判断它在此处的含义；资料不足时明说「这里只能按字面理解」，不要硬编。
+2. 用三个固定小标题回答，总长 ≤ 140 字，短句，不铺垫：
+   ### 一句话定义
+   用一个不带行话的句子说清它是什么（必要时给一个最小例子）。
+   ### 在这里指什么
+   结合被选中的原文，说明它当前承担的具体含义；不是词典义时要点出来。
+   ### 容易混的地方
+   一句话点出最常被混淆的近邻概念，或说「暂时不用区分」。
+3. 不展开历史、不列参考文献、不写学习建议。`
+
+export function conceptMessages(input: {
+  docTitle: string
+  ctx: ReadContext
+  quote: string
+}): ChatMessage[] {
+  return [
+    { role: 'system', content: CONCEPT_SYSTEM },
+    {
+      role: 'user',
+      content: [
+        `【文档】${input.docTitle}`,
+        `【你的阅读位置】${input.ctx.readLabel}`,
+        `【上文】\n${input.ctx.before || '（这是开头）'}`,
+        `【所在段落】\n${input.ctx.current}`,
+        `【读者选中的文字】\n"${input.quote}"`,
+      ].join('\n\n'),
+    },
+  ]
+}
+
 export function critiqueMessages(input: {
   docTitle: string
   ctx: ReadContext

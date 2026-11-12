@@ -3,7 +3,7 @@ import { db, loadSettings, saveSettings } from './db'
 import { defaultSettings } from './ai/presets'
 import { parseFile } from './ingest/parse'
 import type {
-  Anchor, Block, Captured, DepMap, Doc, Folder, Note, NoteKind, Settings, Stuck,
+  Anchor, Block, Captured, DepMap, Doc, Folder, Note, NoteKind, Settings,
 } from './types'
 import { uuid } from './lib/util'
 
@@ -17,7 +17,6 @@ interface AppStore {
   blocks: Block[]
   anchors: Anchor[]
   notes: Note[]
-  stucks: Stuck[]
   settings: Settings
 
   init: () => Promise<void>
@@ -44,10 +43,6 @@ interface AppStore {
   removeNote: (id: string) => Promise<void>
   saveCritique: (noteId: string, text: string, mode: Settings['stance'], model: string) => Promise<void>
   removeCritique: (noteId: string) => Promise<void>
-
-  addStuck: (anchorId: string, question: string) => Promise<void>
-  setStuckResolved: (id: string, resolved: boolean) => Promise<void>
-  removeStuck: (id: string) => Promise<void>
 
   setMap: (map: DepMap) => Promise<void>
   advanceFrontier: (idx: number) => void
@@ -82,7 +77,6 @@ export const useApp = create<AppStore>()((set, get) => ({
   blocks: [],
   anchors: [],
   notes: [],
-  stucks: [],
   settings: defaultSettings(),
 
   async init() {
@@ -157,21 +151,16 @@ export const useApp = create<AppStore>()((set, get) => ({
       const anchorIds = new Set(anchors.map((a) => a.id))
       const allNotes = await db.notes.where('docId').equals(id).toArray()
       const notes = allNotes.filter((n) => anchorIds.has(n.anchorId)).sort((a, b) => a.createdAt - b.createdAt)
-      const stucks = await db.stucks.where('docId').equals(id).toArray()
-      stucks.sort((a, b) => Number(a.resolved) - Number(b.resolved) || a.createdAt - b.createdAt)
-      // 只有被批注/卡点引用过、或用户明确划了线的锚点才该留下：以前的版本会在「解释」时
-      // 就落一个锚点，结果没存成批注也会在正文里留一道划线。这里顺手清掉这些孤儿锚点。
-      const used = new Set([
-        ...notes.map((n) => n.anchorId),
-        ...stucks.map((s) => s.anchorId),
-      ])
+      // 只有被批注引用过、或用户明确划了线/标了查证结论的锚点才该留下：以前的版本会在「解释」
+      // 时就落一个锚点，结果没存成批注也会在正文里留一道划线。这里顺手清掉这些孤儿锚点。
+      const used = new Set([...notes.map((n) => n.anchorId)])
       const keep = (a: Anchor) => used.has(a.id) || a.kind === 'mark' || a.kind === 'verify'
       const orphans = anchors.filter((a) => !keep(a))
       if (orphans.length) await db.anchors.bulkDelete(orphans.map((a) => a.id))
       const keptAnchors = anchors.filter(keep)
       const updated: Doc = { ...doc, lastReadAt: Date.now(), frontierIdx: Math.max(doc.frontierIdx, 0) }
       await db.docs.put(updated)
-      set({ doc: updated, blocks, anchors: keptAnchors, notes, stucks, busy: null })
+      set({ doc: updated, blocks, anchors: keptAnchors, notes, busy: null })
       void get().refreshDocs()
     } catch (err) {
       set({ busy: null, error: err instanceof Error ? err.message : String(err) })
@@ -179,19 +168,18 @@ export const useApp = create<AppStore>()((set, get) => ({
   },
 
   closeDoc() {
-    set({ doc: null, blocks: [], anchors: [], notes: [], stucks: [] })
+    set({ doc: null, blocks: [], anchors: [], notes: [] })
   },
 
   async deleteDoc(id) {
     await db.transaction(
       'rw',
-      [db.docs, db.blocks, db.anchors, db.notes, db.stucks, db.msgs, db.cache],
+      [db.docs, db.blocks, db.anchors, db.notes, db.msgs, db.cache],
       async () => {
         await db.docs.delete(id)
         await db.blocks.where('docId').equals(id).delete()
         await db.anchors.where('docId').equals(id).delete()
         await db.notes.where('docId').equals(id).delete()
-        await db.stucks.where('docId').equals(id).delete()
         await db.msgs.where('docId').equals(id).delete()
       },
     )
@@ -349,9 +337,7 @@ export const useApp = create<AppStore>()((set, get) => ({
   },
 
   async removeMark(id) {
-    const used =
-      get().notes.some((n) => n.anchorId === id) ||
-      get().stucks.some((s) => s.anchorId === id)
+    const used = get().notes.some((n) => n.anchorId === id)
     if (used) {
       // 还有批注挂在上面：只去掉「划线」身份，锚点留着给批注用。
       const anchor = get().anchors.find((a) => a.id === id)
@@ -403,7 +389,6 @@ export const useApp = create<AppStore>()((set, get) => ({
       const anchor = get().anchors.find((a) => a.id === note.anchorId)
       const used =
         notes.some((n) => n.anchorId === note.anchorId) ||
-        get().stucks.some((s) => s.anchorId === note.anchorId) ||
         anchor?.kind === 'mark' || anchor?.kind === 'verify'
       if (!used) {
         await db.anchors.delete(note.anchorId)
@@ -428,50 +413,6 @@ export const useApp = create<AppStore>()((set, get) => ({
     const updated: Note = { ...note, critique: undefined, updatedAt: Date.now() }
     await db.notes.put(updated)
     set({ notes: get().notes.map((n) => (n.id === noteId ? updated : n)) })
-  },
-
-  async addStuck(anchorId, question) {
-    const doc = get().doc
-    if (!doc) return
-    const existing = get().stucks.find((s) => s.anchorId === anchorId && !s.resolved)
-    if (existing) return
-    const stuck: Stuck = {
-      id: uuid(),
-      docId: doc.id,
-      anchorId,
-      question: question.trim(),
-      resolved: false,
-      createdAt: Date.now(),
-    }
-    await db.stucks.put(stuck)
-    set({ stucks: [...get().stucks, stuck] })
-  },
-
-  async setStuckResolved(id, resolved) {
-    const s = get().stucks.find((x) => x.id === id)
-    if (!s) return
-    const updated = { ...s, resolved }
-    await db.stucks.put(updated)
-    set({ stucks: get().stucks.map((x) => (x.id === id ? updated : x)) })
-  },
-
-  async removeStuck(id) {
-    const stuck = get().stucks.find((s) => s.id === id)
-    await db.stucks.delete(id)
-    const stucks = get().stucks.filter((s) => s.id !== id)
-    if (stuck) {
-      const anchor = get().anchors.find((a) => a.id === stuck.anchorId)
-      const used =
-        get().notes.some((n) => n.anchorId === stuck.anchorId) ||
-        get().stucks.some((s) => s.anchorId === stuck.anchorId) ||
-        anchor?.kind === 'mark' || anchor?.kind === 'verify'
-      if (!used) {
-        await db.anchors.delete(stuck.anchorId)
-        set({ stucks, anchors: get().anchors.filter((a) => a.id !== stuck.anchorId) })
-        return
-      }
-    }
-    set({ stucks })
   },
 
   async setMap(map) {

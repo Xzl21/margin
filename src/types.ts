@@ -83,7 +83,7 @@ export interface Anchor {
   quote: { exact: string; prefix: string; suffix: string }
   page?: number
   rects?: NormRect[]
-  /** 'mark' = 只是划了线，不写批注；'verify' = 查证结论的标记；其余（undefined）是批注/卡点的定位锚点。 */
+  /** 'mark' = 只是划了线，不写批注；'verify' = 查证结论的标记；其余（undefined）是批注（含解释/概念）的定位锚点。 */
   kind?: 'mark' | 'verify'
   /** 仅 kind==='verify' 时有效：证实 / 未证实。 */
   verdict?: 'ok' | 'unknown'
@@ -92,7 +92,7 @@ export interface Anchor {
   createdAt: number
 }
 
-/** 批注类别 id。内置五类，用户可以在设置里增删、改名、改颜色。 */
+/** 批注类别 id。内置「解释 / 概念 / 想法 / 自定义」，用户可在设置里改名、改色、增删。 */
 export type NoteKind = string
 
 /** 批注类别：id 稳定不变，label 随便改，color 同时用于页边卡片和正文高亮。 */
@@ -103,7 +103,7 @@ export interface NoteCategory {
 }
 
 /** 可以自定义颜色的划线类型 */
-export type HighlightKey = 'note' | 'stuck' | 'mark' | 'verify-ok' | 'verify-unknown'
+export type HighlightKey = 'note' | 'mark' | 'verify-ok' | 'verify-unknown'
 
 export interface Note {
   id: string
@@ -121,16 +121,7 @@ export interface Note {
   }
 }
 
-export interface Stuck {
-  id: string
-  docId: string
-  anchorId: string
-  question: string
-  resolved: boolean
-  createdAt: number
-}
-
-export type TaskKind = 'explain' | 'critique' | 'map' | 'recap'
+export type TaskKind = 'explain' | 'concept' | 'verify' | 'critique' | 'map' | 'recap'
 
 export interface AiMsg {
   id: string

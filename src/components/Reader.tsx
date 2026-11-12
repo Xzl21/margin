@@ -10,14 +10,13 @@ import { Composer } from './Composer'
 import { ActionDock } from './ActionDock'
 import { HitMenu, type HitAdd } from './HitMenu'
 import { captureHtmlSelection, capturePdfSelection, rangeForAnchor } from '../lib/anchor'
-import { runCritique, runExplain, runMap, runVerify } from '../ai/run'
+import { runConcept, runCritique, runExplain, runMap, runVerify } from '../ai/run'
 
 export function Reader() {
   const doc = useApp((s) => s.doc)
   const blocks = useApp((s) => s.blocks)
   const anchors = useApp((s) => s.anchors)
   const notes = useApp((s) => s.notes)
-  const stucks = useApp((s) => s.stucks)
   const settings = useApp((s) => s.settings)
   const closeDoc = useApp((s) => s.closeDoc)
   const ensureAnchor = useApp((s) => s.ensureAnchor)
@@ -29,9 +28,6 @@ export function Reader() {
   const updateNote = useApp((s) => s.updateNote)
   const removeNote = useApp((s) => s.removeNote)
   const saveCritique = useApp((s) => s.saveCritique)
-  const addStuck = useApp((s) => s.addStuck)
-  const setStuckResolved = useApp((s) => s.setStuckResolved)
-  const removeStuck = useApp((s) => s.removeStuck)
   const removeCritique = useApp((s) => s.removeCritique)
   const setMap = useApp((s) => s.setMap)
   const advanceFrontier = useApp((s) => s.advanceFrontier)
@@ -148,7 +144,7 @@ export function Reader() {
     noteId: string | undefined,
     anchor: Anchor | null,
     run: (onDelta: (t: string) => void, signal: AbortSignal) => Promise<string>,
-    opts: { thinking?: string; model?: string; allowVerdict?: boolean } = {},
+    opts: { thinking?: string; model?: string; allowVerdict?: boolean; noteKind?: string; allowSave?: boolean } = {},
   ): Promise<string> => {
     abortRef.current?.abort()
     const ctrl = new AbortController()
@@ -163,6 +159,8 @@ export function Reader() {
       noteId,
       thinking: opts.thinking,
       allowVerdict: opts.allowVerdict,
+      noteKind: opts.noteKind,
+      allowSave: opts.allowSave,
     })
     let acc = ''
     try {
@@ -250,15 +248,34 @@ export function Reader() {
       undefined,
       null,
       (onDelta, signal) => runExplain({ doc, blocks, settings, captured: cap, question }, onDelta, signal),
+      { noteKind: 'explain', model: settings.routing.explain.model },
     )
   }
 
-  const openComposerFor = (mode: 'note' | 'stuck', cap: Captured, screen: { x: number; y: number }) => {
+  /** 概念：只讲清「它是什么」，比解释更短。 */
+  const handleConcept = async (cap: Captured) => {
+    clearSelection()
+    dockCapRef.current = cap
+    await runDock(
+      '概念',
+      cap.quote.slice(0, 60),
+      undefined,
+      null,
+      (onDelta, signal) => runConcept({ doc, blocks, settings, captured: cap }, onDelta, signal),
+      {
+        noteKind: 'concept',
+        model: settings.routing.explain.model,
+        thinking: '正在把这句话里的概念说清楚…',
+      },
+    )
+  }
+
+  const openComposerFor = (cap: Captured, screen: { x: number; y: number }) => {
     // 打开输入框就收掉浏览器自己的蓝色选区：不落成内容，就不该在原文上留痕。
     window.getSelection()?.removeAllRanges()
     setCaptured(null)
     dockCapRef.current = null
-    openComposer({ mode, captured: cap, screen })
+    openComposer({ captured: cap, screen })
   }
 
   const handleMark = async (cap: Captured) => {
@@ -277,7 +294,7 @@ export function Reader() {
       undefined,
       null,
       (onDelta, signal) => runVerify({ doc, blocks, settings, captured: cap }, onDelta, signal),
-      { thinking: '正在联网检索并核对出处…', model: settings.routing.verify.model, allowVerdict: true },
+      { thinking: '正在联网检索并核对出处…', model: settings.routing.verify.model, allowVerdict: true, allowSave: false },
     )
   }
 
@@ -319,14 +336,6 @@ export function Reader() {
     if (text) await saveCritique(note.id, text, settings.stance, settings.routing.critique.model)
   }
 
-  const handleQuickStuck = async (cap: Captured) => {
-    clearSelection()
-    const anchor = await ensureAnchor(cap)
-    await addStuck(anchor.id, '')
-    setTab('stuck')
-    setPanelOpen(true)
-  }
-
   const capFromAnchor = (anchor: Anchor): Captured => ({
     blockId: anchor.blockId,
     blockIdx: anchor.blockIdx,
@@ -345,10 +354,10 @@ export function Reader() {
     const at = { x: hit?.x ?? 0, y: hit?.y ?? 0 }
     setHit(null)
     if (kind === 'explain') void handleExplain(cap)
+    else if (kind === 'concept') void handleConcept(cap)
     else if (kind === 'mark') void handleMark(cap)
-    else if (kind === 'note') openComposerFor('note', cap, at)
+    else if (kind === 'note') openComposerFor(cap, at)
     else if (kind === 'verify') void handleVerify(cap)
-    else void handleQuickStuck(cap)
   }
 
   const handleComposerSubmit = async (text: string, kind: NoteKind) => {
@@ -358,15 +367,9 @@ export function Reader() {
     setCaptured(null)
     window.getSelection()?.removeAllRanges()
     const anchor = await ensureAnchor(cap)
-    if (composer.mode === 'note') {
-      await addNote(anchor.id, text, kind)
-      setTab('notes')
-      setPanelOpen(true)
-    } else {
-      await addStuck(anchor.id, text)
-      setTab('stuck')
-      setPanelOpen(true)
-    }
+    await addNote(anchor.id, text, kind)
+    setTab('notes')
+    setPanelOpen(true)
   }
 
   const handleGenerateMap = async () => {
@@ -436,7 +439,10 @@ export function Reader() {
     const anchor = dockAnchorRef.current
       ?? (dockCapRef.current ? await ensureAnchor(dockCapRef.current) : null)
     if (!anchor) return
-    await addNote(anchor.id, dock.text, 'summary')
+    // 解释 → 「解释」类别；概念 → 「概念」类别；其余按设置里的默认类别
+    const fallback = settings.noteCategories.find((c) => c.id === 'think')?.id
+      ?? settings.noteCategories[0]?.id ?? 'custom'
+    await addNote(anchor.id, dock.text, dock.noteKind ?? fallback)
     setTab('notes')
     setPanelOpen(true)
     closeDock()
@@ -513,7 +519,6 @@ export function Reader() {
               blocks={blocks}
               anchors={anchors}
               notes={notes}
-              stucks={stucks}
               settings={settings}
               busyNoteId={busyNoteId}
               onCritique={handleCritique}
@@ -541,7 +546,6 @@ export function Reader() {
             blocks={blocks}
             anchors={anchors}
             notes={notes}
-            stucks={stucks}
             settings={settings}
             tab={tab}
             onTab={setTab}
@@ -552,10 +556,6 @@ export function Reader() {
             onDeleteNote={(n) => void removeNote(n.id)}
             onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
             onRemoveCritique={(n) => void removeCritique(n.id)}
-            onToggleStuck={(s) => void setStuckResolved(s.id, !s.resolved)}
-            onDeleteStuck={(s) => {
-              if (window.confirm('删除这个卡点？原文和批注不会受影响。')) void removeStuck(s.id)
-            }}
             onDeleteMark={(a) => void removeMark(a.id)}
             onClose={() => setPanelOpen(false)}
             mapping={mapping}
@@ -568,10 +568,10 @@ export function Reader() {
         <SelectionToolbar
           captured={captured}
           onExplain={() => void handleExplain(captured)}
+          onConcept={() => void handleConcept(captured)}
           onMark={() => void handleMark(captured)}
           onVerify={() => void handleVerify(captured)}
-          onNote={(screen) => openComposerFor('note', captured, screen)}
-          onStuck={() => void handleQuickStuck(captured)}
+          onNote={(screen) => openComposerFor(captured, screen)}
           onClose={() => {
             setCaptured(null)
             window.getSelection()?.removeAllRanges()
@@ -583,12 +583,10 @@ export function Reader() {
         <HitMenu
           anchor={hit.anchor}
           notes={notes.filter((n) => n.anchorId === hit.anchor.id)}
-          stucks={stucks.filter((s) => s.anchorId === hit.anchor.id)}
           x={hit.x}
           y={hit.y}
           onClose={() => setHit(null)}
           onDeleteNote={(n) => void removeNote(n.id)}
-          onDeleteStuck={(s) => void removeStuck(s.id)}
           onDeleteMark={(a) => void removeMark(a.id)}
           onAdd={handleHitAdd}
         />
@@ -596,7 +594,6 @@ export function Reader() {
 
       {composer && (
         <Composer
-          mode={composer.mode}
           screen={composer.screen}
           categories={settings.noteCategories}
           onClose={() => {
@@ -612,7 +609,7 @@ export function Reader() {
           dock={dock}
           onStop={() => abortRef.current?.abort()}
           onClose={closeDock}
-          onSaveNote={() => void saveDockAsNote()}
+          onSaveNote={dock.allowSave === false ? undefined : () => void saveDockAsNote()}
           onVerdict={(v) => void handleVerdict(v)}
         />
       )}

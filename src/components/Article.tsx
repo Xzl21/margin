@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Anchor, Block, Doc, Note, Settings, Stuck } from '../types'
+import type { Anchor, Block, Doc, Note, Settings } from '../types'
 import { paintHtmlHighlights, rangeForAnchor } from '../lib/anchor'
 import { escapeHtml, sanitizeHtml } from '../lib/markdown'
 import { BlockMargin } from './Notes'
@@ -9,7 +9,6 @@ interface Props {
   blocks: Block[]
   anchors: Anchor[]
   notes: Note[]
-  stucks: Stuck[]
   settings: Settings
   busyNoteId: string | null
   onCritique: (note: Note) => void
@@ -20,7 +19,7 @@ interface Props {
 }
 
 export function HtmlArticle({
-  doc, blocks, anchors, notes, stucks, settings, busyNoteId, onCritique, onDeleteNote, onUpdateNote,
+  doc, blocks, anchors, notes, settings, busyNoteId, onCritique, onDeleteNote, onUpdateNote,
   onRemoveCritique, onJump,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
@@ -53,22 +52,19 @@ export function HtmlArticle({
     const root = ref.current
     if (!root) return
     const items = anchors.map((anchor) => {
-      const stuck = stucks.some((s) => s.anchorId === anchor.id && !s.resolved)
       const note = notes.find((n) => n.anchorId === anchor.id)
       const noteTone = note && settings.noteCategories.some((c) => c.id === note.kind)
         ? (`note-${note.kind}` as const)
         : ('note' as const)
-      const tone = stuck
-        ? ('stuck' as const)
-        : note
-          ? noteTone
-          : anchor.kind === 'verify'
-            ? anchor.verdict === 'unknown'
-              ? ('verify-unknown' as const)
-              : ('verify-ok' as const)
-            : anchor.kind === 'mark'
-              ? ('mark' as const)
-              : ('note' as const)
+      const tone = note
+        ? noteTone
+        : anchor.kind === 'verify'
+          ? anchor.verdict === 'unknown'
+            ? ('verify-unknown' as const)
+            : ('verify-ok' as const)
+          : anchor.kind === 'mark'
+            ? ('mark' as const)
+            : ('note' as const)
       return { anchor, tone }
     })
     const timer = window.setTimeout(() => {
@@ -96,7 +92,7 @@ export function HtmlArticle({
       setBadges(next)
     }, 30)
     return () => window.clearTimeout(timer)
-  }, [anchors, stucks, notes, blocks, settings.zoom])
+  }, [anchors, notes, blocks, settings.zoom])
 
   return (
     <div className="article-body" ref={ref} style={{ fontSize: settings.fontSize }}>

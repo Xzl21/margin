@@ -6,7 +6,7 @@ import { Reader } from './components/Reader'
 import { SettingsPanel } from './components/SettingsPanel'
 import type { HighlightKey } from './types'
 
-const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'stuck', 'mark', 'verify-ok', 'verify-unknown']
+const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'mark', 'verify-ok', 'verify-unknown']
 
 /** #rrggbb / #rgb → rgba(...)，给正文高亮用（纯色会盖住字） */
 function withAlpha(color: string, alpha: number): string {

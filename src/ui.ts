@@ -1,8 +1,7 @@
 import { create } from 'zustand'
 import type { Captured } from './types'
 
-export type PanelTab = 'outline' | 'notes' | 'mark' | 'stuck' | 'verify' | 'route'
-export type ComposerMode = 'note' | 'stuck'
+export type PanelTab = 'outline' | 'notes' | 'mark' | 'verify' | 'route'
 
 export interface DockState {
   title: string
@@ -17,10 +16,13 @@ export interface DockState {
   /** 查证类回答：允许用户在结论上标「证实 / 未证实」 */
   allowVerdict?: boolean
   verdict?: 'ok' | 'unknown'
+  /** 这条回答存成批注时用的类别（解释 → explain，概念 → concept） */
+  noteKind?: string
+  /** 是否显示「存成批注」（查证不存批注） */
+  allowSave?: boolean
 }
 
 export interface ComposerState {
-  mode: ComposerMode
   captured: Captured
   screen: { x: number; y: number }
 }

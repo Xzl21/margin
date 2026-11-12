@@ -11,12 +11,11 @@ import { HIGHLIGHT_LABELS } from '../ai/presets'
 type Tab = 'models' | 'colors' | 'reading' | 'search' | 'data'
 type TaskKey = keyof Settings['routing']
 
-const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'stuck', 'mark', 'verify-ok', 'verify-unknown']
+const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'mark', 'verify-ok', 'verify-unknown']
 
 /** 颜色选择器不接受空串，这里给一个和主题默认接近的初始值；选完才写回设置。 */
 const HL_FALLBACK: Record<HighlightKey, string> = {
   note: '#e2a841',
-  stuck: '#c4544a',
   mark: '#ffd666',
   'verify-ok': '#4caf7d',
   'verify-unknown': '#8c8476',
@@ -39,7 +38,6 @@ export function SettingsPanel() {
   const blocks = useApp((s) => s.blocks)
   const anchors = useApp((s) => s.anchors)
   const notes = useApp((s) => s.notes)
-  const stucks = useApp((s) => s.stucks)
 
   const [tab, setTab] = useState<Tab>('models')
   const [testing, setTesting] = useState<string | null>(null)
@@ -122,7 +120,7 @@ export function SettingsPanel() {
       setMessage('先打开一份文档，再导出它的 Markdown 批注')
       return
     }
-    const md = docMarkdown({ doc, blocks, anchors, notes, stucks })
+    const md = docMarkdown({ doc, blocks, anchors, notes })
     download(new Blob([md], { type: 'text/markdown' }), `${doc.title}-批注.md`)
     setMessage('已导出 Markdown')
   }

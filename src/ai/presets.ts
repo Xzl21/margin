@@ -22,18 +22,47 @@ export const PROVIDER_PRESETS: ProviderConfig[] = [
   },
 ]
 
+/**
+ * 内置批注类别：解释 / 概念 / 想法 / 自定义。
+ * 「解释」「概念」由对应功能一键存成批注时自动归类；用户可改名、改色、增删。
+ */
 export const DEFAULT_NOTE_CATEGORIES: NoteCategory[] = [
+  { id: 'explain', label: '解释', color: '#3f7cac' },
+  { id: 'concept', label: '概念', color: '#4f8a5b' },
   { id: 'think', label: '想法', color: '#c98f2e' },
-  { id: 'question', label: '疑问', color: '#3f7cac' },
-  { id: 'objection', label: '反驳', color: '#b4524a' },
-  { id: 'summary', label: '复述', color: '#4f8a5b' },
-  { id: 'todo', label: '待查', color: '#8a6bbf' },
+  { id: 'custom', label: '自定义', color: '#8a6bbf' },
 ]
+
+/** 旧版类别 id → 新版：原「疑问/反驳/复述/待查」统一并到「想法」。 */
+export const LEGACY_NOTE_KINDS: Record<string, string> = {
+  question: 'think',
+  objection: 'think',
+  summary: 'think',
+  todo: 'think',
+  note: 'custom',
+}
+
+/** 把存在浏览器里的旧类别列表整理成新结构（保证「解释 / 概念」存在，退役旧 id）。 */
+export function normalizeNoteCategories(cats: NoteCategory[] | undefined): NoteCategory[] {
+  const defaults = DEFAULT_NOTE_CATEGORIES.map((c) => ({ ...c }))
+  if (!cats?.length) return defaults
+  const retired = new Set(Object.keys(LEGACY_NOTE_KINDS))
+  const kept = cats
+    .filter((c) => !retired.has(c.id))
+    .map((c) => ({ ...c }))
+  const merged = [...kept]
+  for (const def of defaults) {
+    if (!merged.some((c) => c.id === def.id)) merged.push(def)
+  }
+  // 「解释」「概念」排在最前，方便一键保存时对应
+  const head = merged.filter((c) => c.id === 'explain' || c.id === 'concept')
+  const rest = merged.filter((c) => c.id !== 'explain' && c.id !== 'concept')
+  return [...head, ...rest]
+}
 
 /** 空字符串表示跟随主题的默认色 */
 export const DEFAULT_HIGHLIGHT_COLORS: Record<HighlightKey, string> = {
   note: '',
-  stuck: '',
   mark: '',
   'verify-ok': '',
   'verify-unknown': '',
@@ -41,7 +70,6 @@ export const DEFAULT_HIGHLIGHT_COLORS: Record<HighlightKey, string> = {
 
 export const HIGHLIGHT_LABELS: Record<HighlightKey, string> = {
   note: '批注',
-  stuck: '卡点',
   mark: '划线',
   'verify-ok': '查证·证实',
   'verify-unknown': '查证·未证实',

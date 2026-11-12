@@ -1,32 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import type { NoteCategory } from '../types'
-import type { ComposerMode } from '../ui'
 import { useDrag } from '../lib/useDrag'
 
 interface Props {
-  mode: ComposerMode
   screen: { x: number; y: number }
   categories: NoteCategory[]
   onClose: () => void
   onSubmit: (text: string, kind: string) => void
 }
 
-const HINTS: Record<ComposerMode, { title: string; placeholder: string }> = {
-  note: {
-    title: '在这句话旁边，写下你的想法',
-    placeholder: '此刻你想到了什么？不用完整、不用正确。比如：「这里凭什么是显然的？」',
-  },
-  stuck: {
-    title: '记下卡点',
-    placeholder: '卡在哪？是缺一个定义、一个前提，还是一个例子？（可留空）',
-  },
-}
-
-export function Composer({ mode, screen, categories, onClose, onSubmit }: Props) {
+export function Composer({ screen, categories, onClose, onSubmit }: Props) {
+  // 默认落在「想法」，没有就取第一个类别
+  const initialKind = categories.find((c) => c.id === 'think')?.id ?? categories[0]?.id ?? 'think'
   const [text, setText] = useState('')
-  const [kind, setKind] = useState<string>(categories[0]?.id ?? 'think')
+  const [kind, setKind] = useState<string>(initialKind)
   const ref = useRef<HTMLTextAreaElement>(null)
-  const hint = HINTS[mode]
 
   useEffect(() => {
     ref.current?.focus()
@@ -42,46 +30,44 @@ export function Composer({ mode, screen, categories, onClose, onSubmit }: Props)
   const drag = useDrag<HTMLDivElement>({ x: x - 180, y })
 
   const submit = () => {
-    if (mode !== 'stuck' && !text.trim()) return
+    if (!text.trim()) return
     onSubmit(text.trim(), kind)
   }
 
   return (
     <div
       ref={drag.ref}
-      className={`composer draggable no-capture mode-${mode}`}
+      className="composer draggable no-capture"
       style={{ left: drag.pos.x, top: drag.pos.y }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <header className="drag-handle" title="按住可拖动" {...drag.handlers}>
         <span className="drag-grip">⠿</span>
-        <span className="drag-title">{hint.title}</span>
+        <span className="drag-title">在这句话旁边，写下你的想法</span>
         <button type="button" className="icon-btn" onClick={onClose} title="关闭">
           ✕
         </button>
       </header>
 
-      {mode === 'note' && (
-        <div className="kind-row">
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={`chip ${kind === c.id ? 'active' : ''}`}
-              style={{ '--note-color': c.color } as React.CSSProperties}
-              onClick={() => setKind(c.id)}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="kind-row">
+        {categories.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className={`chip ${kind === c.id ? 'active' : ''}`}
+            style={{ '--note-color': c.color } as React.CSSProperties}
+            onClick={() => setKind(c.id)}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
 
       <textarea
         ref={ref}
         value={text}
         rows={4}
-        placeholder={hint.placeholder}
+        placeholder="此刻你想到了什么？不用完整、不用正确。比如：「这里凭什么是显然的？」"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -98,7 +84,7 @@ export function Composer({ mode, screen, categories, onClose, onSubmit }: Props)
             取消
           </button>
           <button type="button" className="primary" onClick={submit}>
-            {mode === 'note' ? '写到页边' : '记下卡点'}
+            写到页边
           </button>
         </div>
       </footer>

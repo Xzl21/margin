@@ -137,6 +137,8 @@ try {
     check('zoom controls present', doc.querySelectorAll('.reader-tools .icon-only svg').length === 2)
     const tabs = [...doc.querySelectorAll('.side-tabs button')].map((b) => (b.textContent ?? '').trim())
     check('mark tab present', tabs.some((t) => /^划线/.test(t)), tabs.join(' | '))
+    check('no stuck tab', !tabs.some((t) => /卡点/.test(t)), tabs.join(' | '))
+    check('verify tab present', tabs.some((t) => /^查证/.test(t)), tabs.join(' | '))
   }
 
   // settings modal
@@ -168,8 +170,8 @@ try {
     if (colorTab) {
       colorTab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
       await wait(200)
-      check('highlight color rows', doc.querySelectorAll('.color-row').length >= 5)
-      check('note categories editable', doc.querySelectorAll('input.cat-label').length >= 5)
+      check('highlight color rows', doc.querySelectorAll('.color-row').length >= 4)
+      check('note categories editable', doc.querySelectorAll('input.cat-label').length >= 4)
     }
   } else {
     check('settings button present', false)

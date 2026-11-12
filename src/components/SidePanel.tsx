@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Anchor, Block, Doc, Note, Settings, Stuck } from '../types'
+import type { Anchor, Block, Doc, Note, Settings } from '../types'
 import type { PanelTab } from '../ui'
 import { NoteCard } from './Notes'
 import { renderMarkdown } from '../lib/markdown'
@@ -10,7 +10,6 @@ interface Props {
   blocks: Block[]
   anchors: Anchor[]
   notes: Note[]
-  stucks: Stuck[]
   settings: Settings
   tab: PanelTab
   onTab: (tab: PanelTab) => void
@@ -21,8 +20,6 @@ interface Props {
   onDeleteNote: (note: Note) => void
   onUpdateNote: (note: Note, body: string, kind: string) => void
   onRemoveCritique: (note: Note) => void
-  onToggleStuck: (stuck: Stuck) => void
-  onDeleteStuck: (stuck: Stuck) => void
   onDeleteMark: (anchor: Anchor) => void
   onClose: () => void
   mapping: boolean
@@ -38,11 +35,10 @@ const KIND_LABEL: Record<string, string> = {
 }
 
 export function SidePanel({
-  doc, blocks, anchors, notes, stucks, settings, tab, onTab, onJumpBlock, onJumpAnchor,
-  onGenerateMap, onCritique, onDeleteNote, onUpdateNote, onRemoveCritique, onToggleStuck, onDeleteStuck,
+  doc, blocks, anchors, notes, settings, tab, onTab, onJumpBlock, onJumpAnchor,
+  onGenerateMap, onCritique, onDeleteNote, onUpdateNote, onRemoveCritique,
   onDeleteMark, onClose, mapping, busyNoteId,
 }: Props) {
-  const openStucks = stucks.filter((s) => !s.resolved)
   const marks = anchors.filter((a) => a.kind === 'mark')
   const verifies = anchors.filter((a) => a.kind === 'verify')
   const outline = doc.outline
@@ -56,7 +52,6 @@ export function SidePanel({
           ['outline', '大纲'],
           ['notes', `批注 ${notes.length}`],
           ['mark', `划线 ${marks.length}`],
-          ['stuck', `卡点 ${openStucks.length}`],
           ['verify', `查证 ${verifies.length}`],
           ['route', '路线'],
         ] as [PanelTab, string][]).map(([key, label]) => (
@@ -138,11 +133,11 @@ export function SidePanel({
               .slice()
               .sort((a, b) => a.blockIdx - b.blockIdx)
               .map((anchor) => (
-                <div key={anchor.id} className="stuck-item">
-                  <div className="stuck-quote">
+                <div key={anchor.id} className="rec-item">
+                  <div className="rec-quote">
                     “{anchor.quote.exact.slice(0, 100)}{anchor.quote.exact.length > 100 ? '…' : ''}”
                   </div>
-                  <div className="stuck-actions">
+                  <div className="rec-actions">
                     <button type="button" className="mini" onClick={() => onJumpAnchor(anchor)}>
                       回到原文
                     </button>
@@ -157,44 +152,6 @@ export function SidePanel({
                   </div>
                 </div>
               ))}
-          </div>
-        )}
-
-        {tab === 'stuck' && (
-          <div className="stuck-list">
-            <div className="panel-note">
-              卡点不是失败。它标记的是你此刻的理解边界；读到后文时，往往会自己亮起来。
-            </div>
-            {stucks.length === 0 && <p className="empty">还没有卡点。读不懂的地方，选中后点「卡点」。</p>}
-            {stucks.map((stuck) => {
-              const anchor = anchors.find((a) => a.id === stuck.anchorId)
-              return (
-                <div key={stuck.id} className={`stuck-item ${stuck.resolved ? 'resolved' : ''}`}>
-                  <div className="stuck-quote">
-                    {anchor ? `“${anchor.quote.exact.slice(0, 80)}${anchor.quote.exact.length > 80 ? '…' : ''}”` : '（原文锚点已丢失）'}
-                  </div>
-                  {stuck.question ? <p className="stuck-q">{stuck.question}</p> : <p className="stuck-q muted">（没写原因）</p>}
-                  <div className="stuck-actions">
-                    {anchor && (
-                      <button type="button" className="mini" onClick={() => onJumpAnchor(anchor)}>
-                        回到原文
-                      </button>
-                    )}
-                    <button type="button" className="mini accent" onClick={() => onToggleStuck(stuck)}>
-                      {stuck.resolved ? '标为未解决' : '标记已解决'}
-                    </button>
-                    <button
-                      type="button"
-                      className="mini danger"
-                      title="删除这个卡点"
-                      onClick={() => onDeleteStuck(stuck)}
-                    >
-                      删除
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
           </div>
         )}
 
@@ -293,8 +250,8 @@ function VerifyItem({ anchor, onJump, onDelete }: {
   const [open, setOpen] = useState(false)
   const ok = anchor.verdict !== 'unknown'
   return (
-    <div className="stuck-item verify-item">
-      <div className="stuck-quote">
+    <div className="rec-item verify-item">
+      <div className="rec-quote">
         “{anchor.quote.exact.slice(0, 90)}{anchor.quote.exact.length > 90 ? '…' : ''}”
       </div>
       <div className="verify-meta">
@@ -308,7 +265,7 @@ function VerifyItem({ anchor, onJump, onDelete }: {
       {open && anchor.verifyText && (
         <div className="verify-detail md" dangerouslySetInnerHTML={{ __html: renderMarkdown(anchor.verifyText) }} />
       )}
-      <div className="stuck-actions">
+      <div className="rec-actions">
         <button type="button" className="mini" onClick={() => onJump(anchor)}>
           回到原文
         </button>

@@ -1,15 +1,14 @@
 import Dexie, { type Table } from 'dexie'
-import type {
-  AiMsg, Anchor, Block, CacheRow, Doc, Folder, Note, Route, Settings, Stuck,
-} from './types'
-import { defaultSettings, pruneProviders, upgradeLegacyModels } from './ai/presets'
+import type { AiMsg, Anchor, Block, CacheRow, Doc, Folder, Note, Route, Settings } from './types'
+import {
+  defaultSettings, LEGACY_NOTE_KINDS, normalizeNoteCategories, pruneProviders, upgradeLegacyModels,
+} from './ai/presets'
 
 export class MarginDB extends Dexie {
   docs!: Table<Doc, string>
   blocks!: Table<Block, string>
   anchors!: Table<Anchor, string>
   notes!: Table<Note, string>
-  stucks!: Table<Stuck, string>
   msgs!: Table<AiMsg, string>
   cache!: Table<CacheRow, string>
   settings!: Table<{ key: string; value: unknown }, string>
@@ -54,6 +53,18 @@ export class MarginDB extends Dexie {
     })
     // v4：去掉「提问」功能，把它留下的表一起清掉
     this.version(4).stores({ asks: null })
+    // v5：去掉「卡点」，并把旧批注类别并到新的四类（解释 / 概念 / 想法 / 自定义）
+    this.version(5)
+      .stores({ stucks: null })
+      .upgrade(async (tx) => {
+        await tx
+          .table('notes')
+          .toCollection()
+          .modify((note: Note) => {
+            const next = LEGACY_NOTE_KINDS[note.kind]
+            if (next) note.kind = next
+          })
+      })
   }
 }
 
@@ -82,7 +93,7 @@ export async function loadSettings(): Promise<Settings | undefined> {
       ...(stored.search ?? {}),
       providers: stored.search?.providers?.length ? stored.search.providers : base.search.providers,
     },
-    noteCategories: stored.noteCategories?.length ? stored.noteCategories : base.noteCategories,
+    noteCategories: normalizeNoteCategories(stored.noteCategories),
     highlightColors: { ...base.highlightColors, ...(stored.highlightColors ?? {}) },
   }
   // 老版本预置了一堆厂商，现在只留 DeepSeek + 自定义；用户自己配过、或任务还在用的继续保留。

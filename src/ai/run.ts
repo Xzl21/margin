@@ -4,6 +4,7 @@ import { extractJson, streamChat } from './client'
 import { fetchPageText, searchWeb } from './search'
 import {
   buildReadContext,
+  conceptMessages,
   critiqueMessages,
   explainMessages,
   mapMessages,
@@ -47,6 +48,33 @@ export async function runExplain(
     proxyBase: input.settings.proxyBase,
     signal,
     temperature: 0.35,
+  })) {
+    out += piece
+    onDelta(piece)
+  }
+  return out
+}
+
+/** 概念：比「解释」更短、更聚焦「它是什么」，不分析论证作用。 */
+export async function runConcept(
+  input: { doc: Doc; blocks: Block[]; settings: Settings; captured: Captured },
+  onDelta: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const { provider, model } = routeFor(input.settings, 'explain')
+  const messages = conceptMessages({
+    docTitle: input.doc.title,
+    ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
+    quote: input.captured.quote,
+  })
+  let out = ''
+  for await (const piece of streamChat({
+    provider,
+    model,
+    messages,
+    proxyBase: input.settings.proxyBase,
+    signal,
+    temperature: 0.2,
   })) {
     out += piece
     onDelta(piece)
