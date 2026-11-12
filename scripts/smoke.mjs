@@ -131,6 +131,9 @@ try {
     check('panel resizer present', Boolean(doc.querySelector('.panel-resizer')))
     check('article main column', Boolean(doc.querySelector('.article-main')))
     check('right rail present', Boolean(doc.querySelector('.article-rail')))
+    const toolText = [...doc.querySelectorAll('.reader-tools button')].map((b) => (b.textContent ?? '').trim())
+    check('rail toggle present', toolText.includes('页边'), toolText.join('|'))
+    check('panel toggle present', toolText.includes('侧栏'), toolText.join('|'))
     const body = doc.querySelector('.reader-body')
     const order = body ? [...body.children].map((el) => el.className) : []
     const panelAt = order.findIndex((c) => /side-panel/.test(c))
