@@ -3,7 +3,6 @@ import { providerById, routeReady, searchReady } from './presets'
 import { extractJson, streamChat } from './client'
 import { fetchPageText, searchWeb } from './search'
 import {
-  askMessages,
   buildReadContext,
   critiqueMessages,
   explainMessages,
@@ -12,7 +11,7 @@ import {
   verifyMessages,
 } from './prompts'
 
-export type Task = 'explain' | 'ask' | 'critique' | 'map'
+export type Task = 'explain' | 'verify' | 'critique' | 'map'
 
 function routeFor(settings: Settings, task: Task) {
   if (!routeReady(settings, task)) {
@@ -48,33 +47,6 @@ export async function runExplain(
     proxyBase: input.settings.proxyBase,
     signal,
     temperature: 0.35,
-  })) {
-    out += piece
-    onDelta(piece)
-  }
-  return out
-}
-
-export async function runAsk(
-  input: { doc: Doc; blocks: Block[]; settings: Settings; captured: Captured; question: string },
-  onDelta: (text: string) => void,
-  signal?: AbortSignal,
-): Promise<string> {
-  const { provider, model } = routeFor(input.settings, 'ask')
-  const messages = askMessages({
-    docTitle: input.doc.title,
-    ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
-    quote: input.captured.quote,
-    question: input.question,
-  })
-  let out = ''
-  for await (const piece of streamChat({
-    provider,
-    model,
-    messages,
-    proxyBase: input.settings.proxyBase,
-    signal,
-    temperature: 0.4,
   })) {
     out += piece
     onDelta(piece)
@@ -124,7 +96,7 @@ export async function runVerify(
   onDelta: (text: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
-  const { provider, model } = routeFor(input.settings, 'ask')
+  const { provider, model } = routeFor(input.settings, 'verify')
   const online = searchReady(input.settings)
   let hits: SearchHit[] = []
   if (online) {

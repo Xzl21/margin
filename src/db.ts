@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import type {
-  AiMsg, Anchor, Ask, Block, CacheRow, Doc, Folder, Note, Settings, Stuck,
+  AiMsg, Anchor, Block, CacheRow, Doc, Folder, Note, Route, Settings, Stuck,
 } from './types'
 import { defaultSettings, upgradeLegacyModels } from './ai/presets'
 
@@ -14,7 +14,6 @@ export class MarginDB extends Dexie {
   cache!: Table<CacheRow, string>
   settings!: Table<{ key: string; value: unknown }, string>
   folders!: Table<Folder, string>
-  asks!: Table<Ask, string>
 
   constructor() {
     super('margin-reader')
@@ -53,6 +52,8 @@ export class MarginDB extends Dexie {
       folders: 'id, createdAt',
       asks: 'id, docId, anchorId, createdAt',
     })
+    // v4：去掉「提问」功能，把它留下的表一起清掉
+    this.version(4).stores({ asks: null })
   }
 }
 
@@ -64,11 +65,18 @@ export async function loadSettings(): Promise<Settings | undefined> {
   // 旧版本存下来的设置可能缺字段（例如后加的 search），合并一次默认值
   const base = defaultSettings()
   const stored = row.value as Partial<Settings>
+  const storedRouting = (stored.routing ?? {}) as Record<string, Route>
   const merged: Settings = {
     ...base,
     ...stored,
     providers: stored.providers?.length ? stored.providers : base.providers,
-    routing: { ...base.routing, ...(stored.routing ?? {}) },
+    // 旧设置里这一项叫 ask（提问）；提问功能已删，把它迁移成查证用的路由。
+    routing: {
+      explain: storedRouting.explain ?? base.routing.explain,
+      verify: storedRouting.verify ?? storedRouting.ask ?? base.routing.verify,
+      critique: storedRouting.critique ?? base.routing.critique,
+      map: storedRouting.map ?? base.routing.map,
+    },
     search: {
       ...base.search,
       ...(stored.search ?? {}),

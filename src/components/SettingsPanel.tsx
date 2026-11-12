@@ -12,7 +12,7 @@ type TaskKey = keyof Settings['routing']
 
 const TASK_LABEL: Record<TaskKey, string> = {
   explain: '划词解释',
-  ask: '提问',
+  verify: '查证',
   critique: '批注点评',
   map: '依赖骨架',
 }
@@ -460,7 +460,7 @@ export function SettingsPanel() {
                   />
                   <span>
                     让 AI 只看到你已经读过的部分
-                    <small>关闭后，解释与提问可以使用全文上下文。默认开启。</small>
+                    <small>关闭后，解释与查证可以使用全文上下文。默认开启。</small>
                   </span>
                 </label>
               </section>

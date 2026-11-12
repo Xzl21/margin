@@ -16,10 +16,6 @@ const HINTS: Record<ComposerMode, { title: string; placeholder: string }> = {
     title: '在这句话旁边，写下你的想法',
     placeholder: '此刻你想到了什么？不用完整、不用正确。比如：「这里凭什么是显然的？」',
   },
-  ask: {
-    title: '就这段，问一个具体问题',
-    placeholder: '比如：「这个前提如果去掉，结论还成立吗？」',
-  },
   stuck: {
     title: '记下卡点',
     placeholder: '卡在哪？是缺一个定义、一个前提，还是一个例子？（可留空）',
@@ -101,7 +97,7 @@ export function Composer({ mode, screen, onClose, onSubmit }: Props) {
             取消
           </button>
           <button type="button" className="primary" onClick={submit}>
-            {mode === 'note' ? '写到页边' : mode === 'ask' ? '问 AI' : '记下卡点'}
+            {mode === 'note' ? '写到页边' : '记下卡点'}
           </button>
         </div>
       </footer>

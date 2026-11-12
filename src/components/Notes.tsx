@@ -19,15 +19,18 @@ interface NoteCardProps {
   busy?: boolean
   onCritique: (note: Note) => void
   onDelete: (note: Note) => void
+  onUpdate?: (note: Note, body: string) => void
   onRemoveCritique?: (note: Note) => void
   onJump?: (anchor: Anchor) => void
 }
 
 export function NoteCard({
-  note, anchor, compact, stance, busy, onCritique, onDelete, onRemoveCritique, onJump,
+  note, anchor, compact, stance, busy, onCritique, onDelete, onUpdate, onRemoveCritique, onJump,
 }: NoteCardProps) {
   const [expanded, setExpanded] = useState(!compact)
   const [showCritique, setShowCritique] = useState(compact)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(note.body)
   const meta = NOTE_KINDS[note.kind]
 
   return (
@@ -46,7 +49,52 @@ export function NoteCard({
           “{anchor.quote.exact.slice(0, 90)}{anchor.quote.exact.length > 90 ? '…' : ''}”
         </button>
       )}
-      <div className={`note-body ${expanded ? '' : 'clamped'}`}>{note.body}</div>
+      {editing ? (
+        <div className="note-edit">
+          <textarea
+            value={draft}
+            rows={4}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setDraft(note.body)
+                setEditing(false)
+              }
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                onUpdate?.(note, draft)
+                setEditing(false)
+              }
+            }}
+          />
+          <div className="note-edit-actions">
+            <button
+              type="button"
+              className="mini accent"
+              disabled={!draft.trim()}
+              onClick={() => {
+                onUpdate?.(note, draft)
+                setEditing(false)
+              }}
+            >
+              保存
+            </button>
+            <button
+              type="button"
+              className="mini"
+              onClick={() => {
+                setDraft(note.body)
+                setEditing(false)
+              }}
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className={`note-body ${expanded ? '' : 'clamped'}`}>{note.body}</div>
+      )}
       {note.critique && showCritique && (
         <div className="note-critique">
           <div className="note-critique-head">
@@ -78,6 +126,18 @@ export function NoteCard({
         <button type="button" className="mini" onClick={() => setExpanded((v) => !v)}>
           {expanded ? '收起' : '展开'}
         </button>
+        {onUpdate && !editing && (
+          <button
+            type="button"
+            className="mini"
+            onClick={() => {
+              setDraft(note.body)
+              setEditing(true)
+            }}
+          >
+            编辑
+          </button>
+        )}
         <button type="button" className="mini accent" disabled={busy} onClick={() => onCritique(note)}>
           {busy ? '思考中…' : stance === 'socratic' ? '让 AI 追问' : '让 AI 校对'}
         </button>
@@ -102,13 +162,14 @@ interface MarginNotesProps {
   busyNoteId?: string | null
   onCritique: (note: Note) => void
   onDelete: (note: Note) => void
+  onUpdate?: (note: Note, body: string) => void
   onRemoveCritique?: (note: Note) => void
   onJump: (anchor: Anchor) => void
 }
 
 /** 页边批注：按块在正文里的垂直位置摆放，模拟写在书页边缘的感觉 */
 export function MarginNotes({
-  containerRef, anchors, notes, stance, busyNoteId, onCritique, onDelete, onRemoveCritique, onJump,
+  containerRef, anchors, notes, stance, busyNoteId, onCritique, onDelete, onUpdate, onRemoveCritique, onJump,
 }: MarginNotesProps) {
   const [tops, setTops] = useState<Record<string, number>>({})
   const [stacked, setStacked] = useState<{ note: Note; anchor: Anchor; top: number }[]>([])
@@ -121,13 +182,18 @@ export function MarginNotes({
     if (!root) return
     const measure = () => {
       const next: Record<string, number> = {}
+      // 用屏幕上的真实位置来量：offsetTop 在不同浏览器/含 zoom 的容器里会和看到的排版对不上，
+      // getBoundingClientRect 才是「划线和批注卡」共同参照的坐标系。
+      const rootRect = root.getBoundingClientRect()
+      // 缩放比例从实际宽度反推：不同浏览器对 zoom 的 computed value 表示并不一致
+      const zoom = rootRect.width && root.offsetWidth ? rootRect.width / root.offsetWidth : 1
       for (const n of notes) {
         if (next[n.anchorId] !== undefined) continue
         const anchor = anchors.find((a) => a.id === n.anchorId)
         if (!anchor) continue
         const el = root.querySelector<HTMLElement>(`[data-block-id="${cssEscape(anchor.blockId)}"]`)
         if (!el) continue
-        next[anchor.id] = Math.max(0, el.offsetTop)
+        next[anchor.id] = Math.max(0, (el.getBoundingClientRect().top - rootRect.top) / zoom)
       }
       setTops(next)
     }
@@ -186,6 +252,7 @@ export function MarginNotes({
             busy={busyNoteId === note.id}
             onCritique={onCritique}
             onDelete={onDelete}
+            onUpdate={onUpdate}
             onRemoveCritique={onRemoveCritique}
             onJump={onJump}
           />

@@ -2348,7 +2348,7 @@ code {
   border-color: var(--danger);
 }
 
-/* ---------- 查证 / 提问列表 ---------- */
+/* ---------- 查证列表 ---------- */
 
 .verify-meta {
   display: flex;
@@ -2358,8 +2358,7 @@ code {
   flex-wrap: wrap;
 }
 
-.verify-detail,
-.ask-a {
+.verify-detail {
   margin: 8px 0 4px;
   padding: 8px 10px;
   border-radius: 8px;
@@ -2369,11 +2368,26 @@ code {
   line-height: 1.7;
 }
 
-.ask-q {
-  margin: 6px 0 4px;
+/* ---------- 批注就地编辑 ---------- */
+
+.note-edit textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 76px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--paper);
   color: var(--ink);
-  font-weight: 550;
-  line-height: 1.6;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.note-edit-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .critique-del {

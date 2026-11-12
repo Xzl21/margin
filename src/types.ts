@@ -119,18 +119,7 @@ export interface Stuck {
   createdAt: number
 }
 
-/** 一次「提问」的问答记录，挂在锚点上，可在侧栏展开查看。 */
-export interface Ask {
-  id: string
-  docId: string
-  anchorId: string
-  question: string
-  answer: string
-  model?: string
-  createdAt: number
-}
-
-export type TaskKind = 'explain' | 'ask' | 'critique' | 'map' | 'recap'
+export type TaskKind = 'explain' | 'critique' | 'map' | 'recap'
 
 export interface AiMsg {
   id: string
@@ -191,7 +180,7 @@ export interface Route {
 
 export interface Settings {
   providers: ProviderConfig[]
-  routing: Record<'explain' | 'ask' | 'critique' | 'map', Route>
+  routing: Record<'explain' | 'verify' | 'critique' | 'map', Route>
   search: SearchSettings
   stance: 'socratic' | 'corrective'
   noSpoiler: boolean

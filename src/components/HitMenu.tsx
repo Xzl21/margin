@@ -1,26 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Anchor, Ask, Note, Stuck } from '../types'
+import type { Anchor, Note, Stuck } from '../types'
 
-export type HitAdd = 'explain' | 'mark' | 'ask' | 'verify' | 'note' | 'stuck'
+export type HitAdd = 'explain' | 'mark' | 'verify' | 'note' | 'stuck'
 
 interface Props {
   anchor: Anchor
   notes: Note[]
   stucks: Stuck[]
-  asks: Ask[]
   x: number
   y: number
   onClose: () => void
   onDeleteNote: (note: Note) => void
   onDeleteStuck: (stuck: Stuck) => void
-  onDeleteAsk: (ask: Ask) => void
   onDeleteMark: (anchor: Anchor) => void
   onAdd: (kind: HitAdd) => void
 }
 
 /** 点中正文里已经划出来的句子时弹出：可以删掉某条记录，也可以在同一个位置再补一个功能。 */
 export function HitMenu({
-  anchor, notes, stucks, asks, x, y, onClose, onDeleteNote, onDeleteStuck, onDeleteAsk, onDeleteMark, onAdd,
+  anchor, notes, stucks, x, y, onClose, onDeleteNote, onDeleteStuck, onDeleteMark, onAdd,
 }: Props) {
   const [confirming, setConfirming] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
@@ -42,7 +40,6 @@ export function HitMenu({
   const addables: [HitAdd, string][] = [
     ['explain', '解释'],
     ...(!hasMark ? ([['mark', '划线']] as [HitAdd, string][]) : []),
-    ['ask', '提问'],
     ...(!hasVerify ? ([['verify', '查证']] as [HitAdd, string][]) : []),
     ['note', '批注'],
     ['stuck', '卡点'],
@@ -54,7 +51,7 @@ export function HitMenu({
         “{anchor.quote.exact.slice(0, 46)}{anchor.quote.exact.length > 46 ? '…' : ''}”
       </div>
 
-      {(notes.length > 0 || stucks.length > 0 || asks.length > 0 || hasMark || hasVerify) && (
+      {(notes.length > 0 || stucks.length > 0 || hasMark || hasVerify) && (
         <div className="hit-section">
           <div className="hit-label">这一句上有</div>
           {notes.map((note) => (
@@ -90,24 +87,6 @@ export function HitMenu({
                 }}
               >
                 {confirming === stuck.id ? '确认删除' : '删除'}
-              </button>
-            </div>
-          ))}
-          {asks.map((ask) => (
-            <div key={ask.id} className="hit-row">
-              <span className="hit-kind">提问</span>
-              <button
-                type="button"
-                className={`mini danger ${confirming === ask.id ? 'armed' : ''}`}
-                onClick={() => {
-                  if (confirming === ask.id) {
-                    onDeleteAsk(ask)
-                    setConfirming(null)
-                    onClose()
-                  } else setConfirming(ask.id)
-                }}
-              >
-                {confirming === ask.id ? '确认删除' : '删除'}
               </button>
             </div>
           ))}

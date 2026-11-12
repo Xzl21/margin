@@ -73,7 +73,7 @@ export function defaultSettings(): Settings {
     providers,
     routing: {
       explain: { ...route },
-      ask: { ...route },
+      verify: { ...route },
       critique: { ...route },
       map: { ...route },
     },

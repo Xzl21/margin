@@ -10,7 +10,7 @@ import { Composer } from './Composer'
 import { ActionDock } from './ActionDock'
 import { HitMenu, type HitAdd } from './HitMenu'
 import { captureHtmlSelection, capturePdfSelection, rangeForAnchor } from '../lib/anchor'
-import { runAsk, runCritique, runExplain, runMap, runVerify } from '../ai/run'
+import { runCritique, runExplain, runMap, runVerify } from '../ai/run'
 
 export function Reader() {
   const doc = useApp((s) => s.doc)
@@ -18,7 +18,6 @@ export function Reader() {
   const anchors = useApp((s) => s.anchors)
   const notes = useApp((s) => s.notes)
   const stucks = useApp((s) => s.stucks)
-  const asks = useApp((s) => s.asks)
   const settings = useApp((s) => s.settings)
   const closeDoc = useApp((s) => s.closeDoc)
   const ensureAnchor = useApp((s) => s.ensureAnchor)
@@ -27,13 +26,12 @@ export function Reader() {
   const removeMark = useApp((s) => s.removeMark)
   const patchSettings = useApp((s) => s.patchSettings)
   const addNote = useApp((s) => s.addNote)
+  const updateNote = useApp((s) => s.updateNote)
   const removeNote = useApp((s) => s.removeNote)
   const saveCritique = useApp((s) => s.saveCritique)
   const addStuck = useApp((s) => s.addStuck)
   const setStuckResolved = useApp((s) => s.setStuckResolved)
   const removeStuck = useApp((s) => s.removeStuck)
-  const addAsk = useApp((s) => s.addAsk)
-  const removeAsk = useApp((s) => s.removeAsk)
   const removeCritique = useApp((s) => s.removeCritique)
   const setMap = useApp((s) => s.setMap)
   const advanceFrontier = useApp((s) => s.advanceFrontier)
@@ -229,7 +227,7 @@ export function Reader() {
     )
   }
 
-  const openComposerFor = (mode: 'note' | 'ask', cap: Captured, screen: { x: number; y: number }) => {
+  const openComposerFor = (mode: 'note' | 'stuck', cap: Captured, screen: { x: number; y: number }) => {
     // 打开输入框就收掉浏览器自己的蓝色选区：不落成内容，就不该在原文上留痕。
     window.getSelection()?.removeAllRanges()
     setCaptured(null)
@@ -244,25 +242,6 @@ export function Reader() {
     await ensureMark(cap)
   }
 
-  const handleAsk = async (cap: Captured, question: string) => {
-    clearSelection()
-    dockCapRef.current = cap
-    const text = await runDock(
-      '提问',
-      question.slice(0, 60),
-      undefined,
-      null,
-      (onDelta, signal) => runAsk({ doc, blocks, settings, captured: cap, question }, onDelta, signal),
-      { thinking: '正在结合已读上下文想…', model: settings.routing.ask.model },
-    )
-    if (!text) return
-    // 有答案才落记录，避免「问了一半」在侧栏和原文里留痕。
-    const anchor = await ensureAnchor(cap)
-    await addAsk(anchor.id, question, text, settings.routing.ask.model)
-    setTab('ask')
-    setPanelOpen(true)
-  }
-
   const handleVerify = async (cap: Captured) => {
     clearSelection()
     dockCapRef.current = cap
@@ -272,7 +251,7 @@ export function Reader() {
       undefined,
       null,
       (onDelta, signal) => runVerify({ doc, blocks, settings, captured: cap }, onDelta, signal),
-      { thinking: '正在联网检索并核对出处…', model: settings.routing.ask.model, allowVerdict: true },
+      { thinking: '正在联网检索并核对出处…', model: settings.routing.verify.model, allowVerdict: true },
     )
   }
 
@@ -341,7 +320,6 @@ export function Reader() {
     setHit(null)
     if (kind === 'explain') void handleExplain(cap)
     else if (kind === 'mark') void handleMark(cap)
-    else if (kind === 'ask') openComposerFor('ask', cap, at)
     else if (kind === 'note') openComposerFor('note', cap, at)
     else if (kind === 'verify') void handleVerify(cap)
     else void handleQuickStuck(cap)
@@ -358,8 +336,6 @@ export function Reader() {
       await addNote(anchor.id, text, kind)
       setTab('notes')
       setPanelOpen(true)
-    } else if (composer.mode === 'ask') {
-      await handleAsk(cap, text)
     } else {
       await addStuck(anchor.id, text)
       setTab('stuck')
@@ -512,6 +488,7 @@ export function Reader() {
               busyNoteId={busyNoteId}
               onCritique={handleCritique}
               onDeleteNote={(n) => void removeNote(n.id)}
+              onUpdateNote={(n, body) => void updateNote(n.id, body)}
               onRemoveCritique={(n) => void removeCritique(n.id)}
               onJump={jumpAnchor}
             />
@@ -525,7 +502,6 @@ export function Reader() {
             anchors={anchors}
             notes={notes}
             stucks={stucks}
-            asks={asks}
             settings={settings}
             tab={tab}
             onTab={setTab}
@@ -534,13 +510,13 @@ export function Reader() {
             onGenerateMap={handleGenerateMap}
             onCritique={handleCritique}
             onDeleteNote={(n) => void removeNote(n.id)}
+            onUpdateNote={(n, body) => void updateNote(n.id, body)}
             onRemoveCritique={(n) => void removeCritique(n.id)}
             onToggleStuck={(s) => void setStuckResolved(s.id, !s.resolved)}
             onDeleteStuck={(s) => {
               if (window.confirm('删除这个卡点？原文和批注不会受影响。')) void removeStuck(s.id)
             }}
             onDeleteMark={(a) => void removeMark(a.id)}
-            onDeleteAsk={(a) => void removeAsk(a.id)}
             onClose={() => setPanelOpen(false)}
             mapping={mapping}
             busyNoteId={busyNoteId}
@@ -553,7 +529,6 @@ export function Reader() {
           captured={captured}
           onExplain={() => void handleExplain(captured)}
           onMark={() => void handleMark(captured)}
-          onAsk={(screen) => openComposerFor('ask', captured, screen)}
           onVerify={() => void handleVerify(captured)}
           onNote={(screen) => openComposerFor('note', captured, screen)}
           onStuck={() => void handleQuickStuck(captured)}
@@ -569,13 +544,11 @@ export function Reader() {
           anchor={hit.anchor}
           notes={notes.filter((n) => n.anchorId === hit.anchor.id)}
           stucks={stucks.filter((s) => s.anchorId === hit.anchor.id)}
-          asks={asks.filter((a) => a.anchorId === hit.anchor.id)}
           x={hit.x}
           y={hit.y}
           onClose={() => setHit(null)}
           onDeleteNote={(n) => void removeNote(n.id)}
           onDeleteStuck={(s) => void removeStuck(s.id)}
-          onDeleteAsk={(a) => void removeAsk(a.id)}
           onDeleteMark={(a) => void removeMark(a.id)}
           onAdd={handleHitAdd}
         />

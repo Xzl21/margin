@@ -76,35 +76,6 @@ export function explainMessages(input: {
   ]
 }
 
-export function askMessages(input: {
-  docTitle: string
-  ctx: ReadContext
-  quote: string
-  question: string
-}): ChatMessage[] {
-  return [
-    {
-      role: 'system',
-      content: `你是读者的伴读。回答问题时：
-1. 只使用【上文】【所在段落】里的信息；需要外部知识时明确说「这是背景知识，不在原文」。
-2. 若问题涉及读者还没读到的后文，直接说明，并给一个不剧透的最小提示。
-3. ≤ 200 字，先给结论，再给原文依据（引用 ≤ 30 字）。
-4. 不写赞美与客套。`,
-    },
-    {
-      role: 'user',
-      content: [
-        `【文档】${input.docTitle}`,
-        `【阅读位置】${input.ctx.readLabel}`,
-        `【上文】\n${input.ctx.before || '（开头）'}`,
-        `【所在段落】\n${input.ctx.current}`,
-        `【划线】"${input.quote}"`,
-        `【问题】${input.question}`,
-      ].join('\n\n'),
-    },
-  ]
-}
-
 export function critiqueMessages(input: {
   docTitle: string
   ctx: ReadContext
