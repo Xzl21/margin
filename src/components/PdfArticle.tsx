@@ -172,6 +172,21 @@ function PdfPage({
           )),
         )}
       </div>
+      {pageHits.map((anchor) => {
+        if (anchor.kind !== 'verify') return null
+        const rects = anchor.rects ?? []
+        const last = rects[rects.length - 1]
+        if (!last) return null
+        return (
+          <span
+            key={`v-${anchor.id}`}
+            className={`verify-badge pdf ${anchor.verdict === 'unknown' ? 'unknown' : 'ok'}`}
+            style={{ left: `${(last.x + last.w) * 100}%`, top: `${last.y * 100}%` }}
+          >
+            {anchor.verdict === 'unknown' ? '?' : '✓'}
+          </span>
+        )
+      })}
     </div>
   )
 }
