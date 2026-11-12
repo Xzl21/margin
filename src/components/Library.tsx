@@ -79,6 +79,50 @@ function DocCard({
   )
 }
 
+/** 书架 banner 右侧的插画：一页纸 + 页边三条不同功能的批注 */
+function HeroArt() {
+  return (
+    <svg className="hero-art" viewBox="0 0 268 196" role="img" aria-label="页边批注示意">
+      <defs>
+        <linearGradient id="hero-page" x1="0" y1="0" x2="0.4" y2="1">
+          <stop offset="0" stopColor="var(--paper-soft)" />
+          <stop offset="1" stopColor="var(--paper)" />
+        </linearGradient>
+      </defs>
+      <g className="art-sheet">
+        <rect x="18" y="12" width="158" height="172" rx="9" fill="url(#hero-page)" />
+        <rect x="18" y="12" width="158" height="172" rx="9" className="art-edge" />
+        <line x1="52" y1="16" x2="52" y2="180" className="art-rule" />
+        {[
+          [64, 40, 84], [64, 56, 96], [64, 72, 70], [64, 100, 92],
+          [64, 116, 78], [64, 144, 88], [64, 160, 60],
+        ].map(([x, y, w], i) => (
+          <rect key={i} x={x} y={y} width={w} height="4" rx="2" className="art-text" />
+        ))}
+        <rect x="64" y="88" width="52" height="6" rx="3" className="art-mark" />
+      </g>
+      <g className="art-note art-note-a">
+        <rect x="150" y="52" width="100" height="34" rx="7" />
+        <rect x="160" y="62" width="62" height="3.5" rx="1.75" className="art-note-line" />
+        <rect x="160" y="71" width="44" height="3.5" rx="1.75" className="art-note-line" />
+      </g>
+      <g className="art-note art-note-b">
+        <rect x="158" y="98" width="92" height="30" rx="7" />
+        <rect x="168" y="108" width="52" height="3.5" rx="1.75" className="art-note-line" />
+        <rect x="168" y="117" width="36" height="3.5" rx="1.75" className="art-note-line" />
+      </g>
+      <g className="art-note art-note-c">
+        <rect x="150" y="140" width="84" height="26" rx="7" />
+        <circle cx="164" cy="153" r="6.5" className="art-check" />
+        <path d="M161 153l2.2 2.4 4-4.6" className="art-check-mark" />
+        <rect x="176" y="150" width="42" height="3.5" rx="1.75" className="art-note-line" />
+      </g>
+      <circle cx="22" cy="26" r="9" className="art-tab" />
+      <path d="M22 21.5v9M17.5 26h9" className="art-tab-mark" />
+    </svg>
+  )
+}
+
 export function Library() {
   const docs = useApp((s) => s.docs)
   const folders = useApp((s) => s.folders)
@@ -155,7 +199,7 @@ export function Library() {
             <h1>
               伴读 <em>Margin</em>
             </h1>
-            <p>把「读到哪、卡在哪、想到什么」留给未来的自己</p>
+            <p>读到哪、想到什么，都留在页边</p>
           </div>
         </div>
         <div className="lib-actions">
@@ -182,32 +226,44 @@ export function Library() {
       <main className="lib-main">
         <section className="hero">
           <div className="hero-copy">
+            <p className="hero-kicker">本地优先 · 不替你读</p>
             <h2>不替你读，帮你读懂。</h2>
             <p>
-              伴读不会把文档压成一段摘要。它先给你脉络，再在你划词的地方解释这句话在论证里干什么；
-              你随手写在页边的想法，它会追问依据、指出跳步，但不会替你下结论。
+              伴读不会把文档压成一段摘要。它先给你脉络，再在你划词的地方解释这句话在论证里干什么、
+              那个词到底是什么意思；你随手写在页边的想法，它会追问依据、指出跳步，但不会替你下结论。
             </p>
             <ul className="hero-points">
               <li><b>不剧透</b>：AI 只看到你已经读到的部分。</li>
               <li><b>不替代</b>：先问你、再补差，不自动总结。</li>
-              <li><b>不锁定</b>：七家模型可换，数据全在本地，随时导出。</li>
+              <li><b>不锁定</b>：预置 DeepSeek，也能接任何 OpenAI 兼容服务；数据在本地，随时导出。</li>
             </ul>
+            <div className="hero-feats">
+              <span>解释</span>
+              <span>概念</span>
+              <span>批注</span>
+              <span>划线</span>
+              <span>查证</span>
+              <em>侧栏另有大纲与阅读路线</em>
+            </div>
           </div>
-          <div className="hero-drop">
-            <p>把 PDF / Word / Markdown / TXT 拖进来</p>
-            <button type="button" className="primary big" onClick={() => inputRef.current?.click()}>
-              选择文件
-            </button>
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                const file = new File([SAMPLE_MD], '从零读懂一个陌生领域.md', { type: 'text/markdown' })
-                void importFiles([file], null)
-              }}
-            >
-              或者，先读一篇 3 分钟的示例
-            </button>
+          <div className="hero-side">
+            <HeroArt />
+            <div className="hero-drop">
+              <p>把 PDF / Word / Markdown / TXT 拖进来</p>
+              <button type="button" className="primary big" onClick={() => inputRef.current?.click()}>
+                选择文件
+              </button>
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  const file = new File([SAMPLE_MD], '从零读懂一个陌生领域.md', { type: 'text/markdown' })
+                  void importFiles([file], null)
+                }}
+              >
+                或者，先读一篇 3 分钟的示例
+              </button>
+            </div>
           </div>
         </section>
 
