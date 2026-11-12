@@ -25,6 +25,7 @@
   --hl-note: rgba(226, 168, 65, 0.35);
   --hl-stuck: rgba(196, 84, 74, 0.24);
   --hl-ai: rgba(106, 141, 191, 0.18);
+  --hl-mark: rgba(255, 214, 102, 0.55);
 }
 
 [data-theme="plain"] {
@@ -43,6 +44,7 @@
   --hl-note: rgba(240, 190, 80, 0.4);
   --hl-stuck: rgba(214, 90, 80, 0.25);
   --hl-ai: rgba(90, 130, 200, 0.2);
+  --hl-mark: rgba(255, 208, 80, 0.6);
 }
 
 [data-theme="dark"] {
@@ -61,6 +63,7 @@
   --hl-note: rgba(220, 170, 80, 0.32);
   --hl-stuck: rgba(220, 110, 100, 0.3);
   --hl-ai: rgba(110, 150, 210, 0.25);
+  --hl-mark: rgba(230, 190, 90, 0.42);
 }
 
 * {
@@ -807,6 +810,11 @@ code {
 
 ::highlight(m-ai) {
   background-color: var(--hl-ai);
+}
+
+::highlight(m-mark) {
+  background-color: var(--hl-mark);
+  color: inherit;
 }
 
 /* ---------- 页边批注 ---------- */
@@ -2131,3 +2139,54 @@ code {
     border-top: 0;
   }
 }
+
+/* ---------- 缩放与可拖动浮窗 ---------- */
+
+.article-body,
+.pdf-doc {
+  zoom: var(--reader-zoom, 1);
+}
+
+.reader-tools .icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  line-height: 0;
+}
+
+.reader-tools .icon-only svg {
+  display: block;
+}
+
+.reader-tools .icon-only:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.composer header.drag-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  gap: 8px;
+}
+
+.composer.draggable {
+  transform: none;
+}
+
+.composer .drag-title {
+  flex: 1;
+  text-align: left;
+}
+
+.composer header.drag-handle:active {
+  cursor: grabbing;
+}
+
+.composer .drag-grip {
+  color: var(--ink-faint);
+  letter-spacing: 1px;
+  margin-right: 2px;
+}
+

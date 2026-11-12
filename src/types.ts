@@ -83,6 +83,8 @@ export interface Anchor {
   quote: { exact: string; prefix: string; suffix: string }
   page?: number
   rects?: NormRect[]
+  /** 'mark' = 只是划了线，不写批注；其余（undefined）是批注/卡点的定位锚点。 */
+  kind?: 'mark'
   createdAt: number
 }
 
@@ -179,6 +181,8 @@ export interface Settings {
   stance: 'socratic' | 'corrective'
   noSpoiler: boolean
   fontSize: number
+  /** 正文缩放，1 = 原始大小，仅影响阅读区域。 */
+  zoom: number
   theme: 'paper' | 'plain' | 'dark'
   proxyBase: string
 }

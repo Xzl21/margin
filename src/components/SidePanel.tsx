@@ -20,6 +20,7 @@ interface Props {
   onDeleteNote: (note: Note) => void
   onToggleStuck: (stuck: Stuck) => void
   onDeleteStuck: (stuck: Stuck) => void
+  onDeleteMark: (anchor: Anchor) => void
   onClose: () => void
   mapping: boolean
   busyNoteId: string | null
@@ -35,9 +36,10 @@ const KIND_LABEL: Record<string, string> = {
 
 export function SidePanel({
   doc, blocks, anchors, notes, stucks, settings, tab, onTab, onJumpBlock, onJumpAnchor,
-  onGenerateMap, onCritique, onDeleteNote, onToggleStuck, onDeleteStuck, onClose, mapping, busyNoteId,
+  onGenerateMap, onCritique, onDeleteNote, onToggleStuck, onDeleteStuck, onDeleteMark, onClose, mapping, busyNoteId,
 }: Props) {
   const openStucks = stucks.filter((s) => !s.resolved)
+  const marks = anchors.filter((a) => a.kind === 'mark')
   const outline = doc.outline
   const ordered = useMemo(() => (doc.map ? topoOrder(doc.map) : []), [doc.map])
   const nodeById = useMemo(() => new Map((doc.map?.nodes ?? []).map((n) => [n.id, n])), [doc.map])
@@ -48,6 +50,7 @@ export function SidePanel({
         {([
           ['outline', '大纲'],
           ['notes', `批注 ${notes.length}`],
+          ['mark', `划线 ${marks.length}`],
           ['stuck', `卡点 ${openStucks.length}`],
           ['route', '路线'],
         ] as [PanelTab, string][]).map(([key, label]) => (
@@ -116,12 +119,44 @@ export function SidePanel({
           </div>
         )}
 
+        {tab === 'mark' && (
+          <div className="mark-list">
+            <div className="panel-note">
+              划线只留下位置，不写内容。回头翻的时候，靠它快进到你当时停下来的地方。
+            </div>
+            {marks.length === 0 && <p className="empty">还没有划线。选中一段文字，点「划线」。</p>}
+            {marks
+              .slice()
+              .sort((a, b) => a.blockIdx - b.blockIdx)
+              .map((anchor) => (
+                <div key={anchor.id} className="stuck-item">
+                  <div className="stuck-quote">
+                    “{anchor.quote.exact.slice(0, 100)}{anchor.quote.exact.length > 100 ? '…' : ''}”
+                  </div>
+                  <div className="stuck-actions">
+                    <button type="button" className="mini" onClick={() => onJumpAnchor(anchor)}>
+                      回到原文
+                    </button>
+                    <button
+                      type="button"
+                      className="mini danger"
+                      title="去掉这道划线"
+                      onClick={() => onDeleteMark(anchor)}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+
         {tab === 'stuck' && (
           <div className="stuck-list">
             <div className="panel-note">
               卡点不是失败。它标记的是你此刻的理解边界；读到后文时，往往会自己亮起来。
             </div>
-            {stucks.length === 0 && <p className="empty">还没有卡点。读不懂的地方，选中后点「没懂」。</p>}
+            {stucks.length === 0 && <p className="empty">还没有卡点。读不懂的地方，选中后点「卡点」。</p>}
             {stucks.map((stuck) => {
               const anchor = anchors.find((a) => a.id === stuck.anchorId)
               return (

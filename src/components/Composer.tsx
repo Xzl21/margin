@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { NoteKind } from '../types'
 import type { ComposerMode } from '../ui'
+import { useDrag } from '../lib/useDrag'
 import { NOTE_KINDS } from './Notes'
 
 interface Props {
@@ -42,6 +43,7 @@ export function Composer({ mode, screen, onClose, onSubmit }: Props) {
 
   const x = Math.min(Math.max(screen.x, 180), window.innerWidth - 200)
   const y = Math.min(Math.max(screen.y + 18, 80), window.innerHeight - 260)
+  const drag = useDrag<HTMLDivElement>({ x: x - 180, y })
 
   const submit = () => {
     if (mode !== 'stuck' && !text.trim()) return
@@ -50,12 +52,14 @@ export function Composer({ mode, screen, onClose, onSubmit }: Props) {
 
   return (
     <div
-      className={`composer no-capture mode-${mode}`}
-      style={{ left: x, top: y }}
+      ref={drag.ref}
+      className={`composer draggable no-capture mode-${mode}`}
+      style={{ left: drag.pos.x, top: drag.pos.y }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <header>
-        <span>{hint.title}</span>
+      <header className="drag-handle" title="按住可拖动" {...drag.handlers}>
+        <span className="drag-grip">⠿</span>
+        <span className="drag-title">{hint.title}</span>
         <button type="button" className="icon-btn" onClick={onClose} title="关闭">
           ✕
         </button>

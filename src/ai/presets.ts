@@ -80,6 +80,7 @@ export function defaultSettings(): Settings {
     stance: 'socratic',
     noSpoiler: true,
     fontSize: 18,
+    zoom: 1,
     theme: 'paper',
     proxyBase: '/api/proxy',
     search: {

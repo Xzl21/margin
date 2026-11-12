@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useApp } from '../store'
 import { useUi } from '../ui'
 import type { Anchor, Captured, Note, NoteKind } from '../types'
@@ -20,6 +20,9 @@ export function Reader() {
   const settings = useApp((s) => s.settings)
   const closeDoc = useApp((s) => s.closeDoc)
   const ensureAnchor = useApp((s) => s.ensureAnchor)
+  const ensureMark = useApp((s) => s.ensureMark)
+  const removeMark = useApp((s) => s.removeMark)
+  const patchSettings = useApp((s) => s.patchSettings)
   const addNote = useApp((s) => s.addNote)
   const removeNote = useApp((s) => s.removeNote)
   const saveCritique = useApp((s) => s.saveCritique)
@@ -107,7 +110,6 @@ export function Reader() {
   if (!doc) return null
 
   const progress = doc.blockCount ? Math.round(((doc.frontierIdx + 1) / doc.blockCount) * 100) : 0
-  const openStucks = stucks.filter((s) => !s.resolved).length
 
   const runDock = async (
     title: string,
@@ -165,6 +167,13 @@ export function Reader() {
       null,
       (onDelta, signal) => runExplain({ doc, blocks, settings, captured: cap, question }, onDelta, signal),
     )
+  }
+
+  const handleMark = async (cap: Captured) => {
+    setCaptured(null)
+    dockCapRef.current = null
+    window.getSelection()?.removeAllRanges()
+    await ensureMark(cap)
   }
 
   const handleAsk = async (cap: Captured, question: string) => {
@@ -322,14 +331,27 @@ export function Reader() {
             type="button"
             className={panelOpen ? 'ghost active' : 'ghost'}
             onClick={() => setPanelOpen((v) => !v)}
+            title="显示或收起右侧栏"
           >
             侧栏
           </button>
-          <button type="button" className="ghost" onClick={() => setTab('notes')}>
-            批注 {notes.length}
+          <button
+            type="button"
+            className="ghost icon-only"
+            title="放大文档页面"
+            disabled={settings.zoom >= 1.8}
+            onClick={() => void patchSettings({ zoom: Math.round((settings.zoom + 0.1) * 10) / 10 })}
+          >
+            <ZoomIcon />
           </button>
-          <button type="button" className="ghost" onClick={() => setTab('stuck')}>
-            卡点 {openStucks}
+          <button
+            type="button"
+            className="ghost icon-only"
+            title="缩小文档页面"
+            disabled={settings.zoom <= 0.7}
+            onClick={() => void patchSettings({ zoom: Math.round((settings.zoom - 0.1) * 10) / 10 })}
+          >
+            <ZoomIcon minus />
           </button>
           <button type="button" className="ghost" onClick={openSettings}>
             设置
@@ -341,7 +363,7 @@ export function Reader() {
       </header>
 
       <div className={`reader-body ${panelOpen ? '' : 'no-panel'}`}>
-        <div className="reader-scroll" ref={articleRef}>
+        <div className="reader-scroll" ref={articleRef} style={{ '--reader-zoom': settings.zoom } as CSSProperties}>
           {doc.kind === 'pdf' ? (
             <PdfArticle doc={doc} anchors={anchors} onVisibleBlock={onPdfPageVisible} />
           ) : (
@@ -379,6 +401,7 @@ export function Reader() {
             onDeleteStuck={(s) => {
               if (window.confirm('删除这个卡点？原文和批注不会受影响。')) void removeStuck(s.id)
             }}
+            onDeleteMark={(a) => void removeMark(a.id)}
             onClose={() => setPanelOpen(false)}
             mapping={mapping}
             busyNoteId={busyNoteId}
@@ -390,9 +413,10 @@ export function Reader() {
         <SelectionToolbar
           captured={captured}
           onExplain={() => void handleExplain(captured)}
+          onMark={() => void handleMark(captured)}
+          onAsk={(screen) => openComposer({ mode: 'ask', captured, screen })}
           onVerify={() => void handleVerify(captured)}
           onNote={(screen) => openComposer({ mode: 'note', captured, screen })}
-          onAsk={(screen) => openComposer({ mode: 'ask', captured, screen })}
           onStuck={() => void handleQuickStuck(captured)}
           onClose={() => {
             setCaptured(null)
@@ -419,5 +443,16 @@ export function Reader() {
         />
       )}
     </div>
+  )
+}
+
+function ZoomIcon({ minus = false }: { minus?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <circle cx="10.5" cy="10.5" r="6.3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15.2 15.2 20.6 20.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M7.6 10.5h5.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      {!minus && <path d="M10.5 7.6v5.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+    </svg>
   )
 }

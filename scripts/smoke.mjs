@@ -131,6 +131,9 @@ try {
     check('reader header present', Boolean(head), (head?.textContent ?? '').replace(/\s+/g, ' ').slice(0, 80))
     const firstBlockText = (doc.querySelector('.blk')?.textContent ?? '').slice(0, 60)
     check('block has text', firstBlockText.length > 10, firstBlockText)
+    check('zoom controls present', doc.querySelectorAll('.reader-tools .icon-only svg').length === 2)
+    const tabs = [...doc.querySelectorAll('.side-tabs button')].map((b) => (b.textContent ?? '').trim())
+    check('mark tab present', tabs.some((t) => /^划线/.test(t)), tabs.join(' | '))
   }
 
   // settings modal

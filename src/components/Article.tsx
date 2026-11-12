@@ -32,11 +32,13 @@ export function HtmlArticle({
     if (!root) return
     const items = anchors.map((anchor) => {
       const stuck = stucks.some((s) => s.anchorId === anchor.id && !s.resolved)
-      return { anchor, tone: stuck ? 'stuck' as const : 'note' as const }
+      const noted = notes.some((n) => n.anchorId === anchor.id)
+      const tone = stuck ? ('stuck' as const) : noted ? ('note' as const) : anchor.kind === 'mark' ? ('mark' as const) : ('note' as const)
+      return { anchor, tone }
     })
     const timer = window.setTimeout(() => paintHtmlHighlights(root, items), 30)
     return () => window.clearTimeout(timer)
-  }, [anchors, stucks, blocks])
+  }, [anchors, stucks, notes, blocks])
 
   return (
     <div className="article-body" ref={ref} style={{ fontSize: settings.fontSize }}>

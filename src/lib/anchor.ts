@@ -1,7 +1,7 @@
 import type { Anchor, Block, Captured } from '../types'
 import { longestCommonSubstring, normalizeSpace } from './util'
 
-export type HighlightTone = 'note' | 'stuck' | 'ai'
+export type HighlightTone = 'note' | 'stuck' | 'ai' | 'mark'
 
 const MAX_QUOTE = 800
 
@@ -193,7 +193,7 @@ export function paintHtmlHighlights(
 ): void {
   const css = (globalThis as unknown as { CSS?: { highlights?: Map<string, unknown> } }).CSS
   if (!css?.highlights) return
-  const buckets: Record<HighlightTone, Range[]> = { note: [], stuck: [], ai: [] }
+  const buckets: Record<HighlightTone, Range[]> = { note: [], stuck: [], ai: [], mark: [] }
   for (const { anchor, tone } of items) {
     const blockEl = root.querySelector<HTMLElement>(`[data-block-id="${CSS_escape(anchor.blockId)}"]`)
     if (!blockEl) continue
@@ -202,7 +202,7 @@ export function paintHtmlHighlights(
   }
   const H = (globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight
   if (!H) return
-  for (const tone of ['note', 'stuck', 'ai'] as HighlightTone[]) {
+  for (const tone of ['note', 'stuck', 'ai', 'mark'] as HighlightTone[]) {
     const hl = new H(...buckets[tone])
     css.highlights.set(`m-${tone}`, hl)
   }

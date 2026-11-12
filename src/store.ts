@@ -36,6 +36,8 @@ interface AppStore {
   removeProvider: (id: string) => Promise<void>
 
   ensureAnchor: (captured: Captured) => Promise<Anchor>
+  ensureMark: (captured: Captured) => Promise<Anchor>
+  removeMark: (id: string) => Promise<void>
   addNote: (anchorId: string, body: string, kind: NoteKind) => Promise<Note>
   removeNote: (id: string) => Promise<void>
   saveCritique: (noteId: string, text: string, mode: Settings['stance'], model: string) => Promise<void>
@@ -154,12 +156,13 @@ export const useApp = create<AppStore>()((set, get) => ({
       const notes = allNotes.filter((n) => anchorIds.has(n.anchorId)).sort((a, b) => a.createdAt - b.createdAt)
       const stucks = await db.stucks.where('docId').equals(id).toArray()
       stucks.sort((a, b) => Number(a.resolved) - Number(b.resolved) || a.createdAt - b.createdAt)
-      // 只有被批注/卡点引用过的锚点才该留下：以前的版本会在「解释」时就落一个锚点，
-      // 结果没存成批注也会在正文里留一道划线。这里顺手清掉这些孤儿锚点。
+      // 只有被批注/卡点引用过、或用户明确划了线的锚点才该留下：以前的版本会在「解释」时
+      // 就落一个锚点，结果没存成批注也会在正文里留一道划线。这里顺手清掉这些孤儿锚点。
       const used = new Set([...notes.map((n) => n.anchorId), ...stucks.map((s) => s.anchorId)])
-      const orphans = anchors.filter((a) => !used.has(a.id))
+      const keep = (a: Anchor) => used.has(a.id) || a.kind === 'mark'
+      const orphans = anchors.filter((a) => !keep(a))
       if (orphans.length) await db.anchors.bulkDelete(orphans.map((a) => a.id))
-      const keptAnchors = anchors.filter((a) => used.has(a.id))
+      const keptAnchors = anchors.filter(keep)
       const updated: Doc = { ...doc, lastReadAt: Date.now(), frontierIdx: Math.max(doc.frontierIdx, 0) }
       await db.docs.put(updated)
       set({ doc: updated, blocks, anchors: keptAnchors, notes, stucks, busy: null })
@@ -279,6 +282,52 @@ export const useApp = create<AppStore>()((set, get) => ({
     return anchor
   },
 
+  async ensureMark(captured) {
+    const doc = get().doc
+    if (!doc) throw new Error('没有打开的文档')
+    const same = get().anchors.find(
+      (a) => a.blockId === captured.blockId && a.quote.exact === captured.quote,
+    )
+    if (same) {
+      if (same.kind === 'mark') return same
+      // 这段已经被批注/卡点占着，就顺手把它也当划线显示，不再新建重复锚点。
+      const updated: Anchor = { ...same, kind: 'mark' }
+      await db.anchors.put(updated)
+      set({ anchors: get().anchors.map((a) => (a.id === same.id ? updated : a)) })
+      return updated
+    }
+    const anchor: Anchor = {
+      id: uuid(),
+      docId: doc.id,
+      blockId: captured.blockId,
+      blockIdx: captured.blockIdx,
+      quote: { exact: captured.quote, prefix: captured.prefix, suffix: captured.suffix },
+      page: captured.page,
+      rects: captured.rects,
+      kind: 'mark',
+      createdAt: Date.now(),
+    }
+    await db.anchors.put(anchor)
+    set({ anchors: [...get().anchors, anchor] })
+    return anchor
+  },
+
+  async removeMark(id) {
+    const used =
+      get().notes.some((n) => n.anchorId === id) || get().stucks.some((s) => s.anchorId === id)
+    if (used) {
+      // 还有批注挂在上面：只去掉「划线」身份，锚点留着给批注用。
+      const anchor = get().anchors.find((a) => a.id === id)
+      if (!anchor) return
+      const updated: Anchor = { ...anchor, kind: undefined }
+      await db.anchors.put(updated)
+      set({ anchors: get().anchors.map((a) => (a.id === id ? updated : a)) })
+      return
+    }
+    await db.anchors.delete(id)
+    set({ anchors: get().anchors.filter((a) => a.id !== id) })
+  },
+
   async addNote(anchorId, body, kind) {
     const doc = get().doc
     if (!doc) throw new Error('没有打开的文档')
@@ -301,9 +350,11 @@ export const useApp = create<AppStore>()((set, get) => ({
     await db.notes.delete(id)
     const notes = get().notes.filter((n) => n.id !== id)
     if (note) {
+      const anchor = get().anchors.find((a) => a.id === note.anchorId)
       const used =
         notes.some((n) => n.anchorId === note.anchorId) ||
-        get().stucks.some((s) => s.anchorId === note.anchorId)
+        get().stucks.some((s) => s.anchorId === note.anchorId) ||
+        anchor?.kind === 'mark'
       if (!used) {
         await db.anchors.delete(note.anchorId)
         set({ notes, anchors: get().anchors.filter((a) => a.id !== note.anchorId) })
@@ -351,9 +402,11 @@ export const useApp = create<AppStore>()((set, get) => ({
     await db.stucks.delete(id)
     const stucks = get().stucks.filter((s) => s.id !== id)
     if (stuck) {
+      const anchor = get().anchors.find((a) => a.id === stuck.anchorId)
       const used =
         get().notes.some((n) => n.anchorId === stuck.anchorId) ||
-        stucks.some((s) => s.anchorId === stuck.anchorId)
+        stucks.some((s) => s.anchorId === stuck.anchorId) ||
+        anchor?.kind === 'mark'
       if (!used) {
         await db.anchors.delete(stuck.anchorId)
         set({ stucks, anchors: get().anchors.filter((a) => a.id !== stuck.anchorId) })
