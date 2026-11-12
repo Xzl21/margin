@@ -2,7 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import type {
   AiMsg, Anchor, Block, CacheRow, Doc, Folder, Note, Route, Settings, Stuck,
 } from './types'
-import { defaultSettings, upgradeLegacyModels } from './ai/presets'
+import { defaultSettings, pruneProviders, upgradeLegacyModels } from './ai/presets'
 
 export class MarginDB extends Dexie {
   docs!: Table<Doc, string>
@@ -82,7 +82,11 @@ export async function loadSettings(): Promise<Settings | undefined> {
       ...(stored.search ?? {}),
       providers: stored.search?.providers?.length ? stored.search.providers : base.search.providers,
     },
+    noteCategories: stored.noteCategories?.length ? stored.noteCategories : base.noteCategories,
+    highlightColors: { ...base.highlightColors, ...(stored.highlightColors ?? {}) },
   }
+  // 老版本预置了一堆厂商，现在只留 DeepSeek + 自定义；用户自己配过、或任务还在用的继续保留。
+  merged.providers = pruneProviders(merged.providers, merged.routing)
   return upgradeLegacyModels(merged)
 }
 

@@ -488,7 +488,7 @@ export function Reader() {
               busyNoteId={busyNoteId}
               onCritique={handleCritique}
               onDeleteNote={(n) => void removeNote(n.id)}
-              onUpdateNote={(n, body) => void updateNote(n.id, body)}
+              onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
               onRemoveCritique={(n) => void removeCritique(n.id)}
               onJump={jumpAnchor}
             />
@@ -510,7 +510,7 @@ export function Reader() {
             onGenerateMap={handleGenerateMap}
             onCritique={handleCritique}
             onDeleteNote={(n) => void removeNote(n.id)}
-            onUpdateNote={(n, body) => void updateNote(n.id, body)}
+            onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
             onRemoveCritique={(n) => void removeCritique(n.id)}
             onToggleStuck={(s) => void setStuckResolved(s.id, !s.resolved)}
             onDeleteStuck={(s) => {
@@ -558,6 +558,7 @@ export function Reader() {
         <Composer
           mode={composer.mode}
           screen={composer.screen}
+          categories={settings.noteCategories}
           onClose={() => {
             closeComposer()
             window.getSelection()?.removeAllRanges()

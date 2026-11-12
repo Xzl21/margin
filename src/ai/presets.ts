@@ -1,4 +1,4 @@
-import type { ProviderConfig, SearchProvider, Settings } from '../types'
+import type { HighlightKey, NoteCategory, ProviderConfig, SearchProvider, Settings } from '../types'
 
 export const SEARCH_PRESETS: SearchProvider[] = [
   { id: 'tavily', name: 'Tavily', kind: 'tavily', apiKey: '', proxy: true },
@@ -7,64 +7,45 @@ export const SEARCH_PRESETS: SearchProvider[] = [
   { id: 'searxng', name: 'SearXNG（自建，免费）', kind: 'searxng', apiKey: '', endpoint: '', proxy: true },
 ]
 
+/**
+ * 只保留 DeepSeek 一家预置；其余厂商走「添加自定义」（任何 OpenAI 兼容接口都行）。
+ * baseURL 用官方当前推荐的 https://api.deepseek.com，客户端会自己拼 /chat/completions。
+ */
 export const PROVIDER_PRESETS: ProviderConfig[] = [
   {
     id: 'deepseek',
     name: 'DeepSeek',
-    baseURL: 'https://api.deepseek.com/v1',
+    baseURL: 'https://api.deepseek.com',
     apiKey: '',
     models: ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-v4-flash'],
     proxy: true,
   },
-  {
-    id: 'qwen',
-    name: '通义千问（阿里云）',
-    baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    apiKey: '',
-    models: ['qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen-long'],
-    proxy: true,
-  },
-  {
-    id: 'kimi',
-    name: 'Kimi（月之暗面）',
-    baseURL: 'https://api.moonshot.cn/v1',
-    apiKey: '',
-    models: ['kimi-k2-0905-preview', 'moonshot-v1-32k', 'moonshot-v1-128k'],
-    proxy: true,
-  },
-  {
-    id: 'glm',
-    name: '智谱 GLM',
-    baseURL: 'https://open.bigmodel.cn/api/paas/v4',
-    apiKey: '',
-    models: ['glm-4-plus', 'glm-4-flash', 'glm-4-air'],
-    proxy: true,
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    baseURL: 'https://api.openai.com/v1',
-    apiKey: '',
-    models: ['gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1'],
-    proxy: true,
-  },
-  {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey: '',
-    models: ['deepseek/deepseek-chat-v3-0324', 'google/gemini-2.5-flash', 'anthropic/claude-sonnet-4'],
-    proxy: false,
-  },
-  {
-    id: 'ollama',
-    name: 'Ollama（本地）',
-    baseURL: 'http://127.0.0.1:11434/v1',
-    apiKey: '',
-    models: ['qwen2.5:7b', 'llama3.1:8b', 'deepseek-r1:7b'],
-    proxy: false,
-  },
 ]
+
+export const DEFAULT_NOTE_CATEGORIES: NoteCategory[] = [
+  { id: 'think', label: '想法', color: '#c98f2e' },
+  { id: 'question', label: '疑问', color: '#3f7cac' },
+  { id: 'objection', label: '反驳', color: '#b4524a' },
+  { id: 'summary', label: '复述', color: '#4f8a5b' },
+  { id: 'todo', label: '待查', color: '#8a6bbf' },
+]
+
+/** 空字符串表示跟随主题的默认色 */
+export const DEFAULT_HIGHLIGHT_COLORS: Record<HighlightKey, string> = {
+  note: '',
+  stuck: '',
+  mark: '',
+  'verify-ok': '',
+  'verify-unknown': '',
+}
+
+export const HIGHLIGHT_LABELS: Record<HighlightKey, string> = {
+  note: '批注',
+  stuck: '卡点',
+  mark: '划线',
+  'verify-ok': '查证·证实',
+  'verify-unknown': '查证·未证实',
+}
 
 export function defaultSettings(): Settings {
   const providers = PROVIDER_PRESETS.map((p) => ({ ...p, models: [...p.models] }))
@@ -83,12 +64,32 @@ export function defaultSettings(): Settings {
     zoom: 1,
     theme: 'paper',
     proxyBase: '/api/proxy',
+    noteCategories: DEFAULT_NOTE_CATEGORIES.map((c) => ({ ...c })),
+    highlightColors: { ...DEFAULT_HIGHLIGHT_COLORS },
     search: {
       providers: SEARCH_PRESETS.map((p) => ({ ...p })),
       activeId: 'tavily',
       maxResults: 5,
     },
   }
+}
+
+/**
+ * 移除已经不再预置的厂商（qwen / kimi / glm / openai / openrouter / ollama），
+ * 但保留：DeepSeek 本身、用户自己加的 custom-*、以及还被某个任务引用的厂商。
+ */
+export function pruneProviders(
+  providers: ProviderConfig[],
+  routing: Settings['routing'],
+): ProviderConfig[] {
+  const used = new Set(Object.values(routing).map((r) => r.providerId))
+  const kept = providers.filter(
+    (p) => p.id === 'deepseek' || p.id.startsWith('custom-') || used.has(p.id),
+  )
+  if (!kept.some((p) => p.id === 'deepseek')) {
+    kept.unshift({ ...PROVIDER_PRESETS[0], models: [...PROVIDER_PRESETS[0].models] })
+  }
+  return kept
 }
 
 export function providerById(settings: Settings, id: string): ProviderConfig | undefined {

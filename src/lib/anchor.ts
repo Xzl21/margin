@@ -1,7 +1,18 @@
 import type { Anchor, Block, Captured } from '../types'
 import { longestCommonSubstring, normalizeSpace } from './util'
 
-export type HighlightTone = 'note' | 'stuck' | 'ai' | 'mark' | 'verify-ok' | 'verify-unknown'
+/**
+ * 批注按类别着色，所以除了固定语义色，还允许 `note-<类别 id>`。
+ * 对应的 ::highlight(m-note-<id>) 规则由 App 按设置动态注入。
+ */
+export type HighlightTone =
+  | 'note'
+  | 'stuck'
+  | 'ai'
+  | 'mark'
+  | 'verify-ok'
+  | 'verify-unknown'
+  | `note-${string}`
 
 const MAX_QUOTE = 800
 
@@ -193,20 +204,25 @@ export function paintHtmlHighlights(
 ): void {
   const css = (globalThis as unknown as { CSS?: { highlights?: Map<string, unknown> } }).CSS
   if (!css?.highlights) return
-  const buckets: Record<HighlightTone, Range[]> = {
-    note: [], stuck: [], ai: [], mark: [], 'verify-ok': [], 'verify-unknown': [],
-  }
+  const buckets = new Map<string, Range[]>()
   for (const { anchor, tone } of items) {
     const blockEl = root.querySelector<HTMLElement>(`[data-block-id="${CSS_escape(anchor.blockId)}"]`)
     if (!blockEl) continue
     const range = rangeForAnchor(blockEl, anchor)
-    if (range) buckets[tone].push(range)
+    if (!range) continue
+    const key = `m-${tone}`
+    const list = buckets.get(key)
+    if (list) list.push(range)
+    else buckets.set(key, [range])
   }
   const H = (globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight
   if (!H) return
-  for (const tone of ['note', 'stuck', 'ai', 'mark', 'verify-ok', 'verify-unknown'] as HighlightTone[]) {
-    const hl = new H(...buckets[tone])
-    css.highlights.set(`m-${tone}`, hl)
+  // 先把上一轮画过的全部撤掉，否则改了类别/删了批注会留下“幽灵红线”
+  for (const key of Array.from(css.highlights.keys())) {
+    if (key.startsWith('m-')) css.highlights.delete(key)
+  }
+  for (const [key, ranges] of buckets) {
+    css.highlights.set(key, new H(...ranges))
   }
 }
 

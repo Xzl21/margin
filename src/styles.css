@@ -845,7 +845,7 @@ code {
 .note-card {
   background: var(--paper-soft);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--note-color, var(--accent));
   border-radius: 8px;
   padding: 10px 12px;
   font-family: var(--font-ui);
@@ -860,22 +860,6 @@ code {
   padding: 9px 10px;
 }
 
-.note-card.tone-question {
-  border-left-color: #3f7cac;
-}
-
-.note-card.tone-objection {
-  border-left-color: var(--danger);
-}
-
-.note-card.tone-summary {
-  border-left-color: #4f8a5b;
-}
-
-.note-card.tone-todo {
-  border-left-color: #8a6bbf;
-}
-
 .note-head {
   display: flex;
   align-items: center;
@@ -886,23 +870,8 @@ code {
 .note-kind {
   font-size: 10.5px;
   letter-spacing: 0.08em;
-  color: var(--accent-ink);
-}
-
-.tone-question .note-kind {
-  color: #2f6088;
-}
-
-.tone-objection .note-kind {
-  color: var(--danger);
-}
-
-.tone-summary .note-kind {
-  color: #3c6f47;
-}
-
-.tone-todo .note-kind {
-  color: #6b4f9c;
+  color: var(--note-color, var(--accent-ink));
+  font-weight: 600;
 }
 
 .note-time {
@@ -1379,8 +1348,59 @@ code {
 
 .chip.active {
   background: var(--accent-soft);
-  border-color: var(--accent);
+  border-color: var(--note-color, var(--accent));
   color: var(--accent-ink);
+}
+
+.note-kind-edit {
+  margin-bottom: 6px;
+}
+
+/* ---------- 设置：颜色 ---------- */
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+.color-row .color-label {
+  min-width: 96px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.color-row .color-value {
+  min-width: 84px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.color-row input[type='color'] {
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.color-row .cat-label {
+  width: 190px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.color-row input[type='color'] + .mini {
+  margin-left: auto;
 }
 
 /* ---------- AI 浮窗 ---------- */

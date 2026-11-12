@@ -152,6 +152,22 @@ try {
       check('search settings render', /Tavily/.test(text) && /查证/.test(text), text.replace(/\s+/g, ' ').slice(0, 60))
       check('search provider cards', doc.querySelectorAll('.provider-card').length >= 4)
     }
+
+    const modelsTab = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '模型')
+    if (modelsTab) {
+      modelsTab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+      await wait(200)
+      check('only deepseek preset', doc.querySelectorAll('.provider-card').length === 1, String(doc.querySelectorAll('.provider-card').length))
+    }
+
+    const colorTab = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '外观')
+    check('colors tab present', Boolean(colorTab))
+    if (colorTab) {
+      colorTab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+      await wait(200)
+      check('highlight color rows', doc.querySelectorAll('.color-row').length >= 5)
+      check('note categories editable', doc.querySelectorAll('input.cat-label').length >= 5)
+    }
   } else {
     check('settings button present', false)
   }

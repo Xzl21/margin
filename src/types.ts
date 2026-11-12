@@ -92,7 +92,18 @@ export interface Anchor {
   createdAt: number
 }
 
-export type NoteKind = 'think' | 'question' | 'objection' | 'summary' | 'todo'
+/** 批注类别 id。内置五类，用户可以在设置里增删、改名、改颜色。 */
+export type NoteKind = string
+
+/** 批注类别：id 稳定不变，label 随便改，color 同时用于页边卡片和正文高亮。 */
+export interface NoteCategory {
+  id: string
+  label: string
+  color: string
+}
+
+/** 可以自定义颜色的划线类型 */
+export type HighlightKey = 'note' | 'stuck' | 'mark' | 'verify-ok' | 'verify-unknown'
 
 export interface Note {
   id: string
@@ -189,6 +200,10 @@ export interface Settings {
   zoom: number
   theme: 'paper' | 'plain' | 'dark'
   proxyBase: string
+  /** 批注类别（可增删改）；颜色用于页边卡片与正文高亮 */
+  noteCategories: NoteCategory[]
+  /** 各类划线的颜色；空字符串表示跟随主题默认色 */
+  highlightColors: Record<HighlightKey, string>
 }
 
 export interface Captured {

@@ -40,7 +40,7 @@ interface AppStore {
   ensureVerify: (captured: Captured, verdict: 'ok' | 'unknown', text?: string) => Promise<Anchor>
   removeMark: (id: string) => Promise<void>
   addNote: (anchorId: string, body: string, kind: NoteKind) => Promise<Note>
-  updateNote: (id: string, body: string) => Promise<void>
+  updateNote: (id: string, body: string, kind?: string) => Promise<void>
   removeNote: (id: string) => Promise<void>
   saveCritique: (noteId: string, text: string, mode: Settings['stance'], model: string) => Promise<void>
   removeCritique: (noteId: string) => Promise<void>
@@ -382,10 +382,15 @@ export const useApp = create<AppStore>()((set, get) => ({
     return note
   },
 
-  async updateNote(id, body) {
+  async updateNote(id, body, kind) {
     const note = get().notes.find((n) => n.id === id)
     if (!note) return
-    const updated: Note = { ...note, body: body.trim(), updatedAt: Date.now() }
+    const updated: Note = {
+      ...note,
+      body: body.trim(),
+      kind: kind?.trim() ? kind : note.kind,
+      updatedAt: Date.now(),
+    }
     await db.notes.put(updated)
     set({ notes: get().notes.map((n) => (n.id === id ? updated : n)) })
   },

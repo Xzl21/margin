@@ -14,7 +14,7 @@ interface Props {
   busyNoteId: string | null
   onCritique: (note: Note) => void
   onDeleteNote: (note: Note) => void
-  onUpdateNote: (note: Note, body: string) => void
+  onUpdateNote: (note: Note, body: string, kind: string) => void
   onRemoveCritique: (note: Note) => void
   onJump: (anchor: Anchor) => void
 }
@@ -36,11 +36,14 @@ export function HtmlArticle({
     if (!root) return
     const items = anchors.map((anchor) => {
       const stuck = stucks.some((s) => s.anchorId === anchor.id && !s.resolved)
-      const noted = notes.some((n) => n.anchorId === anchor.id)
+      const note = notes.find((n) => n.anchorId === anchor.id)
+      const noteTone = note && settings.noteCategories.some((c) => c.id === note.kind)
+        ? (`note-${note.kind}` as const)
+        : ('note' as const)
       const tone = stuck
         ? ('stuck' as const)
-        : noted
-          ? ('note' as const)
+        : note
+          ? noteTone
           : anchor.kind === 'verify'
             ? anchor.verdict === 'unknown'
               ? ('verify-unknown' as const)
@@ -93,6 +96,7 @@ export function HtmlArticle({
         containerRef={ref}
         anchors={anchors}
         notes={notes}
+        categories={settings.noteCategories}
         stance={settings.stance}
         busyNoteId={busyNoteId}
         onCritique={onCritique}

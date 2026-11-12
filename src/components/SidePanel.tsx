@@ -19,7 +19,7 @@ interface Props {
   onGenerateMap: () => void
   onCritique: (note: Note) => void
   onDeleteNote: (note: Note) => void
-  onUpdateNote: (note: Note, body: string) => void
+  onUpdateNote: (note: Note, body: string, kind: string) => void
   onRemoveCritique: (note: Note) => void
   onToggleStuck: (stuck: Stuck) => void
   onDeleteStuck: (stuck: Stuck) => void
@@ -115,6 +115,7 @@ export function SidePanel({
                   key={note.id}
                   note={note}
                   anchor={anchors.find((a) => a.id === note.anchorId)}
+                  categories={settings.noteCategories}
                   stance={settings.stance}
                   busy={busyNoteId === note.id}
                   onCritique={onCritique}

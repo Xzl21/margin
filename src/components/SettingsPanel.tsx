@@ -5,10 +5,22 @@ import { collectChat } from '../ai/client'
 import { searchWeb } from '../ai/search'
 import { docMarkdown, download, exportBundle, importBundle } from '../lib/backup'
 import { uuid } from '../lib/util'
-import type { ProviderConfig, SearchKind, SearchProvider, Settings } from '../types'
+import type { HighlightKey, NoteCategory, ProviderConfig, SearchKind, SearchProvider, Settings } from '../types'
+import { HIGHLIGHT_LABELS } from '../ai/presets'
 
-type Tab = 'models' | 'reading' | 'search' | 'data'
+type Tab = 'models' | 'colors' | 'reading' | 'search' | 'data'
 type TaskKey = keyof Settings['routing']
+
+const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'stuck', 'mark', 'verify-ok', 'verify-unknown']
+
+/** 颜色选择器不接受空串，这里给一个和主题默认接近的初始值；选完才写回设置。 */
+const HL_FALLBACK: Record<HighlightKey, string> = {
+  note: '#e2a841',
+  stuck: '#c4544a',
+  mark: '#ffd666',
+  'verify-ok': '#4caf7d',
+  'verify-unknown': '#8c8476',
+}
 
 const TASK_LABEL: Record<TaskKey, string> = {
   explain: '划词解释',
@@ -134,6 +146,7 @@ export function SettingsPanel() {
           <div className="settings-tabs">
             {([
               ['models', '模型'],
+              ['colors', '外观'],
               ['reading', '阅读'],
               ['search', '联网'],
               ['data', '数据'],
@@ -163,7 +176,7 @@ export function SettingsPanel() {
               <section>
                 <h3>任务用哪个模型</h3>
                 <p className="section-hint">
-                  四个任务可以各用各的模型。便宜的模型（如 deepseek-flash、qwen-flash）做解释足够；骨架和点评可以用更强的。
+                  四个任务可以各用各的模型。便宜的模型（deepseek-flash）做解释足够；骨架和点评可以换成更强的 deepseek-v4-pro。
                 </p>
                 <div className="route-grid">
                   {(Object.keys(TASK_LABEL) as TaskKey[]).map((key) => {
@@ -214,7 +227,7 @@ export function SettingsPanel() {
               <section>
                 <h3>厂商与密钥</h3>
                 <p className="section-hint">
-                  密钥只保存在这台电脑的浏览器 IndexedDB 里，不会上传到任何地方。浏览器直连被 CORS 拦时，打开「经本地转发」，
+                  只预置 DeepSeek 一家，其它任何 OpenAI 兼容接口都可以用下面的「添加自定义」接进来。密钥只保存在这台电脑的浏览器 IndexedDB 里，不会上传到任何地方。浏览器直连被 CORS 拦时，打开「经本地转发」，
                   并用 <code>node server/serve.mjs</code> 启动（或部署时保留 <code>/api/proxy</code>）。
                 </p>
                 <div className="provider-list">
@@ -255,7 +268,7 @@ export function SettingsPanel() {
                           <span>Base URL</span>
                           <input
                             value={provider.baseURL}
-                            placeholder="https://api.deepseek.com/v1"
+                            placeholder="https://api.deepseek.com"
                             onChange={(e) => updateProvider({ ...provider, baseURL: e.target.value })}
                           />
                         </label>
@@ -264,7 +277,7 @@ export function SettingsPanel() {
                           <input
                             type="password"
                             value={provider.apiKey}
-                            placeholder="sk-…（Ollama 可留空）"
+                            placeholder="sk-…（本地模型可留空）"
                             autoComplete="off"
                             onChange={(e) => updateProvider({ ...provider, apiKey: e.target.value })}
                           />
@@ -305,6 +318,106 @@ export function SettingsPanel() {
                   }
                 >
                   + 添加自定义（任何 OpenAI 兼容接口）
+                </button>
+              </section>
+            </>
+          )}
+
+          {tab === 'colors' && (
+            <>
+              <section>
+                <h3>划线颜色</h3>
+                <p className="section-hint">
+                  五类标记各用各的颜色，正文高亮和 PDF 覆盖层都会跟着变。想回主题默认就点「跟随主题」。
+                </p>
+                {HIGHLIGHT_KEYS.map((key) => (
+                  <div className="color-row" key={key}>
+                    <span className="color-label">{HIGHLIGHT_LABELS[key]}</span>
+                    <input
+                      type="color"
+                      value={settings.highlightColors[key] || HL_FALLBACK[key]}
+                      onChange={(e) =>
+                        void patchSettings({
+                          highlightColors: { ...settings.highlightColors, [key]: e.target.value },
+                        })
+                      }
+                    />
+                    <span className="color-value">
+                      {settings.highlightColors[key] ? settings.highlightColors[key] : '跟随主题'}
+                    </span>
+                    <button
+                      type="button"
+                      className="mini"
+                      disabled={!settings.highlightColors[key]}
+                      onClick={() =>
+                        void patchSettings({
+                          highlightColors: { ...settings.highlightColors, [key]: '' },
+                        })
+                      }
+                    >
+                      跟随主题
+                    </button>
+                  </div>
+                ))}
+              </section>
+
+              <section>
+                <h3>批注类别</h3>
+                <p className="section-hint">
+                  类别名随便改，颜色决定页边卡片的边线和正文里这条批注的高亮。删掉一个类别不会删批注，
+                  那些批注会退回主题默认色，也可以在批注的「编辑」里换到别的类别。
+                </p>
+                {settings.noteCategories.map((c) => (
+                  <div className="color-row" key={c.id}>
+                    <input
+                      className="cat-label"
+                      value={c.label}
+                      onChange={(e) =>
+                        void patchSettings({
+                          noteCategories: settings.noteCategories.map((x) =>
+                            x.id === c.id ? { ...x, label: e.target.value } : x,
+                          ),
+                        })
+                      }
+                    />
+                    <input
+                      type="color"
+                      value={c.color}
+                      onChange={(e) =>
+                        void patchSettings({
+                          noteCategories: settings.noteCategories.map((x) =>
+                            x.id === c.id ? { ...x, color: e.target.value } : x,
+                          ),
+                        })
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="mini danger"
+                      disabled={settings.noteCategories.length <= 1}
+                      onClick={() =>
+                        void patchSettings({
+                          noteCategories: settings.noteCategories.filter((x) => x.id !== c.id),
+                        })
+                      }
+                    >
+                      删除
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    const cat: NoteCategory = {
+                      id: `cat-${Date.now().toString(36).slice(-5)}`,
+                      label: '新类别',
+                      color: '#7a8fa6',
+                    }
+                    void patchSettings({ noteCategories: [...settings.noteCategories, cat] })
+                  }}
+                >
+                  + 新增类别
                 </button>
               </section>
             </>

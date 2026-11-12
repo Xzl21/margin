@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import type { NoteKind } from '../types'
+import type { NoteCategory } from '../types'
 import type { ComposerMode } from '../ui'
 import { useDrag } from '../lib/useDrag'
-import { NOTE_KINDS } from './Notes'
 
 interface Props {
   mode: ComposerMode
   screen: { x: number; y: number }
+  categories: NoteCategory[]
   onClose: () => void
-  onSubmit: (text: string, kind: NoteKind) => void
+  onSubmit: (text: string, kind: string) => void
 }
 
 const HINTS: Record<ComposerMode, { title: string; placeholder: string }> = {
@@ -22,9 +22,9 @@ const HINTS: Record<ComposerMode, { title: string; placeholder: string }> = {
   },
 }
 
-export function Composer({ mode, screen, onClose, onSubmit }: Props) {
+export function Composer({ mode, screen, categories, onClose, onSubmit }: Props) {
   const [text, setText] = useState('')
-  const [kind, setKind] = useState<NoteKind>('think')
+  const [kind, setKind] = useState<string>(categories[0]?.id ?? 'think')
   const ref = useRef<HTMLTextAreaElement>(null)
   const hint = HINTS[mode]
 
@@ -63,14 +63,15 @@ export function Composer({ mode, screen, onClose, onSubmit }: Props) {
 
       {mode === 'note' && (
         <div className="kind-row">
-          {(Object.keys(NOTE_KINDS) as NoteKind[]).map((key) => (
+          {categories.map((c) => (
             <button
-              key={key}
+              key={c.id}
               type="button"
-              className={`chip ${kind === key ? 'active' : ''} ${NOTE_KINDS[key].tone}`}
-              onClick={() => setKind(key)}
+              className={`chip ${kind === c.id ? 'active' : ''}`}
+              style={{ '--note-color': c.color } as React.CSSProperties}
+              onClick={() => setKind(c.id)}
             >
-              {NOTE_KINDS[key].label}
+              {c.label}
             </button>
           ))}
         </div>
