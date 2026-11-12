@@ -1,6 +1,9 @@
-import type { Block, Captured, DepMap, Doc, Note, SearchHit, Settings } from '../types'
+import type {
+  Block, Captured, DepMap, Doc, Note, ProviderConfig, SearchHit, Settings,
+} from '../types'
 import { providerById, routeReady, searchReady } from './presets'
-import { extractJson, streamChat } from './client'
+import { extractJson, streamChat, type ChatMessage, type TokenUsage } from './client'
+import { recordUsage } from './usage'
 import { fetchPageText, searchWeb } from './search'
 import {
   askMessages,
@@ -13,9 +16,11 @@ import {
   verifyMessages,
 } from './prompts'
 
-export type Task = 'explain' | 'ask' | 'verify' | 'critique' | 'map'
+export type Task = 'explain' | 'concept' | 'ask' | 'verify' | 'critique' | 'map'
+/** 真正对应设置里 routing 行的任务（概念复用解释的路由） */
+export type RoutedTask = 'explain' | 'ask' | 'verify' | 'critique' | 'map'
 
-function routeFor(settings: Settings, task: Task) {
+function routeFor(settings: Settings, task: RoutedTask) {
   if (!routeReady(settings, task)) {
     throw new Error('还没有可用的模型。打开「设置 → 模型」，选一个厂商并填入 API Key（Ollama 本地模型不用填）。')
   }
@@ -27,6 +32,39 @@ function routeFor(settings: Settings, task: Task) {
 
 function ctxFor(doc: Doc, blocks: Block[], blockIdx: number, settings: Settings) {
   return buildReadContext(blocks, blockIdx, doc.frontierIdx, settings.noSpoiler)
+}
+
+/** 统一的流式调用：边吐字边收尾，顺带把服务端回报的 token 记到本机用量表。 */
+async function streamTask(
+  opts: {
+    provider: ProviderConfig
+    model: string
+    messages: ChatMessage[]
+    proxyBase: string
+    temperature?: number
+    signal?: AbortSignal
+  },
+  task: Task,
+  doc: Doc,
+  onDelta: (text: string) => void,
+): Promise<string> {
+  let usage: TokenUsage | undefined
+  let out = ''
+  for await (const piece of streamChat({ ...opts, onUsage: (u) => { usage = u } })) {
+    out += piece
+    onDelta(piece)
+  }
+  if (usage) {
+    void recordUsage({
+      task,
+      provider: opts.provider,
+      model: opts.model,
+      usage,
+      docId: doc.id,
+      docTitle: doc.title,
+    })
+  }
+  return out
 }
 
 export async function runExplain(
@@ -41,19 +79,12 @@ export async function runExplain(
     quote: input.captured.quote,
     question: input.question,
   })
-  let out = ''
-  for await (const piece of streamChat({
-    provider,
-    model,
-    messages,
-    proxyBase: input.settings.proxyBase,
-    signal,
-    temperature: 0.35,
-  })) {
-    out += piece
-    onDelta(piece)
-  }
-  return out
+  return streamTask(
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.35 },
+    'explain',
+    input.doc,
+    onDelta,
+  )
 }
 
 /** 概念：比「解释」更短、更聚焦「它是什么」，不分析论证作用。 */
@@ -68,19 +99,12 @@ export async function runConcept(
     ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
     quote: input.captured.quote,
   })
-  let out = ''
-  for await (const piece of streamChat({
-    provider,
-    model,
-    messages,
-    proxyBase: input.settings.proxyBase,
-    signal,
-    temperature: 0.2,
-  })) {
-    out += piece
-    onDelta(piece)
-  }
-  return out
+  return streamTask(
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2 },
+    'concept',
+    input.doc,
+    onDelta,
+  )
 }
 
 export async function runCritique(
@@ -104,19 +128,19 @@ export async function runCritique(
     previous: input.previous,
     stance: input.settings.stance,
   })
-  let out = ''
-  for await (const piece of streamChat({
-    provider,
-    model,
-    messages,
-    proxyBase: input.settings.proxyBase,
-    signal,
-    temperature: input.settings.stance === 'socratic' ? 0.6 : 0.3,
-  })) {
-    out += piece
-    onDelta(piece)
-  }
-  return out
+  return streamTask(
+    {
+      provider,
+      model,
+      messages,
+      proxyBase: input.settings.proxyBase,
+      signal,
+      temperature: input.settings.stance === 'socratic' ? 0.6 : 0.3,
+    },
+    'critique',
+    input.doc,
+    onDelta,
+  )
 }
 
 /** 联网查证：检索 → 抓正文 → 带编号引用的核查结论。 */
@@ -153,18 +177,12 @@ export async function runVerify(
     online,
   })
 
-  let out = ''
-  for await (const piece of streamChat({
-    provider,
-    model,
-    messages,
-    proxyBase: input.settings.proxyBase,
-    signal,
-    temperature: 0.2,
-  })) {
-    out += piece
-    onDelta(piece)
-  }
+  let out = await streamTask(
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2 },
+    'verify',
+    input.doc,
+    onDelta,
+  )
 
   const list = hits.slice(0, 6)
   const suffix =
@@ -220,18 +238,12 @@ export async function runAsk(
     pages,
     online,
   })
-  let out = ''
-  for await (const piece of streamChat({
-    provider,
-    model,
-    messages,
-    proxyBase: input.settings.proxyBase,
-    signal,
-    temperature: 0.4,
-  })) {
-    out += piece
-    onDelta(piece)
-  }
+  let out = await streamTask(
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.4 },
+    'ask',
+    input.doc,
+    onDelta,
+  )
   if (hits.length) {
     const suffix =
       '\n\n---\n\n**参考资料**\n\n' +
@@ -257,17 +269,12 @@ export async function runMap(  input: { doc: Doc; blocks: Block[]; settings: Set
         .map((b) => ({ title: b.text, level: 1, blockIdx: b.idx }))
   const excerpt = input.blocks.slice(0, 80).map((b) => b.text).join('\n')
   const messages = mapMessages({ docTitle: input.doc.title, outline, excerpt })
-  let out = ''
-  for await (const piece of streamChat({
-    provider,
-    model,
-    messages,
-    proxyBase: input.settings.proxyBase,
-    signal,
-    temperature: 0.2,
-  })) {
-    out += piece
-  }
+  const out = await streamTask(
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2 },
+    'map',
+    input.doc,
+    () => {},
+  )
   const raw = extractJson<unknown>(out)
   const map = normalizeMap(raw, Date.now(), model)
   if (!map) throw new Error('模型返回的骨架不是合法 JSON，再试一次，或换一个更强的模型。')

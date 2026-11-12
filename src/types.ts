@@ -143,6 +143,20 @@ export interface Ask {
   updatedAt: number
 }
 
+/** 一次模型调用消耗的 token，用来在本机统计用量（不上传、不联网） */
+export interface UsageRow {
+  id: string
+  at: number
+  task: TaskKind
+  providerId: string
+  providerName: string
+  model: string
+  promptTokens: number
+  completionTokens: number
+  docId?: string
+  docTitle?: string
+}
+
 export interface AiMsg {
   id: string
   docId: string

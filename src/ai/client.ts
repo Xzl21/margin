@@ -5,6 +5,11 @@ export interface ChatMessage {
   content: string
 }
 
+export interface TokenUsage {
+  promptTokens: number
+  completionTokens: number
+}
+
 export interface StreamOptions {
   provider: ProviderConfig
   model: string
@@ -12,6 +17,8 @@ export interface StreamOptions {
   proxyBase: string
   temperature?: number
   signal?: AbortSignal
+  /** 服务端在流末尾回报 token 用量时回调（不支持的厂商不会触发） */
+  onUsage?: (usage: TokenUsage) => void
 }
 
 function chatEndpoint(provider: ProviderConfig, proxyBase: string): string {
@@ -49,6 +56,7 @@ export async function* streamChat(opts: StreamOptions): AsyncGenerator<string> {
         model: opts.model,
         messages: opts.messages,
         stream: true,
+        stream_options: { include_usage: true },
         temperature: opts.temperature ?? 0.4,
       }),
     })
@@ -74,6 +82,7 @@ export async function* streamChat(opts: StreamOptions): AsyncGenerator<string> {
   if (!reader) throw new LlmError('模型没有返回内容流')
   const decoder = new TextDecoder()
   let buffer = ''
+  let usageReported = false
 
   for (;;) {
     const { done, value } = await reader.read()
@@ -89,9 +98,17 @@ export async function* streamChat(opts: StreamOptions): AsyncGenerator<string> {
       try {
         const json = JSON.parse(payload) as {
           choices?: { delta?: { content?: string; reasoning_content?: string } }[]
+          usage?: { prompt_tokens?: number; completion_tokens?: number }
           error?: { message?: string }
         }
         if (json.error?.message) throw new LlmError(json.error.message)
+        if (json.usage && !usageReported) {
+          usageReported = true
+          opts.onUsage?.({
+            promptTokens: json.usage.prompt_tokens ?? 0,
+            completionTokens: json.usage.completion_tokens ?? 0,
+          })
+        }
         const delta = json.choices?.[0]?.delta
         if (delta?.content) yield delta.content
       } catch (err) {

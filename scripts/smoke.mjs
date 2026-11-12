@@ -177,6 +177,15 @@ check('ask tab before mark', tabs.findIndex((t) => /^提问/.test(t)) < tabs.fin
       check('only deepseek preset', doc.querySelectorAll('.provider-card').length === 1, String(doc.querySelectorAll('.provider-card').length))
     }
 
+    const usageTab = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '用量')
+    check('usage tab present', Boolean(usageTab))
+    if (usageTab) {
+      usageTab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+      await wait(300)
+      const text = doc.body.textContent ?? ''
+      check('usage panel render', /API 用量/.test(text), text.replace(/\s+/g, ' ').slice(0, 60))
+    }
+
     const colorTab = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '外观')
     check('colors tab present', Boolean(colorTab))
     if (colorTab) {

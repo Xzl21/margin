@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { AiMsg, Anchor, Ask, Block, CacheRow, Doc, Folder, Note, Route, Settings } from './types'
+import type { AiMsg, Anchor, Ask, Block, CacheRow, Doc, Folder, Note, Route, Settings, UsageRow } from './types'
 import {
   defaultSettings, LEGACY_NOTE_KINDS, normalizeNoteCategories, pruneProviders, upgradeLegacyModels,
 } from './ai/presets'
@@ -14,6 +14,7 @@ export class MarginDB extends Dexie {
   settings!: Table<{ key: string; value: unknown }, string>
   folders!: Table<Folder, string>
   asks!: Table<Ask, string>
+  usage!: Table<UsageRow, string>
 
   constructor() {
     super('margin-reader')
@@ -68,6 +69,8 @@ export class MarginDB extends Dexie {
       })
     // v6：提问功能回来了，这次一条提问带完整的多轮对话
     this.version(6).stores({ asks: 'id, docId, anchorId, createdAt' })
+    // v7：本机记录每次模型调用的 token 用量
+    this.version(7).stores({ usage: 'id, at, task, model' })
   }
 }
 

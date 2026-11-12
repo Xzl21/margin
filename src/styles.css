@@ -2898,3 +2898,14 @@ body.panel-resizing .panel-resizer::after {
     width: 320px;
   }
 }
+
+/* ---- 设置 · 用量 ---- */
+.usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0 18px; }
+.usage-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--paper-soft); display: flex; flex-direction: column; gap: 2px; }
+.usage-card strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.usage-label { font-size: 12px; color: var(--ink-2); }
+.usage-sub { font-size: 12px; color: var(--ink-3); }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 14px; }
+.usage-table th { text-align: left; font-weight: 500; color: var(--ink-2); border-bottom: 1px solid var(--line); padding: 6px 8px 6px 0; }
+.usage-table td { padding: 6px 8px 6px 0; border-bottom: 1px dashed var(--line-soft, var(--line)); font-variant-numeric: tabular-nums; }
+.usage-table td:first-child { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

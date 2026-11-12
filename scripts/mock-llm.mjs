@@ -148,6 +148,12 @@ const server = http.createServer((req, res) => {
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`)
       await new Promise((r) => setTimeout(r, 12))
     }
+    res.write(
+      `data: ${JSON.stringify({
+        choices: [],
+        usage: { prompt_tokens: 1280, completion_tokens: 96, total_tokens: 1376 },
+      })}\n\n`,
+    )
     res.write('data: [DONE]\n\n')
     res.end()
   })

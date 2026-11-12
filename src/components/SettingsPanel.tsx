@@ -7,8 +7,9 @@ import { docMarkdown, download, exportBundle, importBundle } from '../lib/backup
 import { uuid } from '../lib/util'
 import type { HighlightKey, NoteCategory, ProviderConfig, SearchKind, SearchProvider, Settings } from '../types'
 import { HIGHLIGHT_LABELS } from '../ai/presets'
+import { clearUsage, loadUsage, TASK_NAME, type UsageSummary } from '../ai/usage'
 
-type Tab = 'models' | 'colors' | 'reading' | 'search' | 'data'
+type Tab = 'models' | 'colors' | 'reading' | 'search' | 'usage' | 'data'
 type TaskKey = keyof Settings['routing']
 
 const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'ask', 'mark', 'verify-ok', 'verify-unknown']
@@ -30,6 +31,18 @@ const TASK_LABEL: Record<TaskKey, string> = {
   map: '依赖骨架',
 }
 
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
+
+function fmtTime(at: number): string {
+  const d = new Date(at)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export function SettingsPanel() {
   const close = useUi((s) => s.closeSettings)
   const settings = useApp((s) => s.settings)
@@ -46,7 +59,20 @@ export function SettingsPanel() {
   const [testResult, setTestResult] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [usage, setUsage] = useState<string>('')
+  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null)
+  const [usageTick, setUsageTick] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (tab !== 'usage') return
+    let alive = true
+    void loadUsage(80).then((s) => {
+      if (alive) setUsageSummary(s)
+    })
+    return () => {
+      alive = false
+    }
+  }, [tab, usageTick])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -149,6 +175,7 @@ export function SettingsPanel() {
               ['colors', '外观'],
               ['reading', '阅读'],
               ['search', '联网'],
+              ['usage', '用量'],
               ['data', '数据'],
             ] as [Tab, string][]).map(([key, label]) => (
               <button key={key} type="button" className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
@@ -614,6 +641,124 @@ export function SettingsPanel() {
                   转发地址只在打开「经本地转发」时使用。自托管时可指向自己的转发服务，路径形如
                   <code> /api/proxy?url=&lt;encoded&gt;</code>。
                 </p>
+              </section>
+            </>
+          )}
+
+          {tab === 'usage' && (
+            <>
+              <section>
+                <h3>API 用量</h3>
+                <p className="section-hint">
+                  每次调用模型后，服务端回报的 token 数会记在本机这里（不上传、不同步）。没有回报用量的厂商不会出现在统计里。
+                </p>
+                {!usageSummary ? (
+                  <p className="section-hint">读取中…</p>
+                ) : usageSummary.total.calls === 0 ? (
+                  <p className="section-hint">
+                    还没有记录。去正文里划一个词、点「解释」或「提问」，之后回到这里就能看到。
+                  </p>
+                ) : (
+                  <>
+                    <div className="usage-grid">
+                      {([
+                        ['今天', usageSummary.today],
+                        ['近 7 天', usageSummary.week],
+                        ['总计', usageSummary.total],
+                      ] as const).map(([label, t]) => (
+                        <div className="usage-card" key={label}>
+                          <span className="usage-label">{label}</span>
+                          <strong>{fmtTokens(t.promptTokens + t.completionTokens)}</strong>
+                          <span className="usage-sub">
+                            输入 {fmtTokens(t.promptTokens)} · 输出 {fmtTokens(t.completionTokens)} · {t.calls} 次
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <h3>按功能</h3>
+                    <table className="usage-table">
+                      <thead>
+                        <tr>
+                          <th>功能</th>
+                          <th>次数</th>
+                          <th>输入</th>
+                          <th>输出</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usageSummary.byTask.map((row) => (
+                          <tr key={row.key}>
+                            <td>{TASK_NAME[row.key] ?? row.key}</td>
+                            <td>{row.calls}</td>
+                            <td>{fmtTokens(row.promptTokens)}</td>
+                            <td>{fmtTokens(row.completionTokens)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    <h3>按模型</h3>
+                    <table className="usage-table">
+                      <thead>
+                        <tr>
+                          <th>模型</th>
+                          <th>次数</th>
+                          <th>输入</th>
+                          <th>输出</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usageSummary.byModel.map((row) => (
+                          <tr key={row.key}>
+                            <td>{row.label}</td>
+                            <td>{row.calls}</td>
+                            <td>{fmtTokens(row.promptTokens)}</td>
+                            <td>{fmtTokens(row.completionTokens)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    <h3>最近调用</h3>
+                    <table className="usage-table">
+                      <thead>
+                        <tr>
+                          <th>时间</th>
+                          <th>功能</th>
+                          <th>模型</th>
+                          <th>输入</th>
+                          <th>输出</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usageSummary.recent.map((row) => (
+                          <tr key={row.id}>
+                            <td>{fmtTime(row.at)}</td>
+                            <td>{TASK_NAME[row.task] ?? row.task}</td>
+                            <td>{row.model}</td>
+                            <td>{fmtTokens(row.promptTokens)}</td>
+                            <td>{fmtTokens(row.completionTokens)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    <p className="section-hint">
+                      这里只统计 token，不换算金额：各家单价不同，按你手上的价目表乘一下即可。记录只在本浏览器，换设备不会带过去。
+                    </p>
+                    <button
+                      type="button"
+                      className="mini danger"
+                      onClick={() => {
+                        if (!window.confirm('清空本机所有用量记录？不影响文档和批注。')) return
+                        void clearUsage().then(() => setUsageTick((n) => n + 1))
+                      }}
+                    >
+                      清空用量记录
+                    </button>
+                  </>
+                )}
               </section>
             </>
           )}
