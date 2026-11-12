@@ -1,5 +1,6 @@
 # 伴读 Margin
 
+**在线使用：<https://aihelpread-2db.pages.dev/>**（打开即用，第一次在「设置 → 模型」里填自己的 API Key）
 
 数据全部留在本地浏览器（IndexedDB），无账号、无后端、无埋点；模型与检索都用你自己的 Key。
 
