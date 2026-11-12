@@ -3,7 +3,7 @@ import { db, loadSettings, saveSettings } from './db'
 import { defaultSettings } from './ai/presets'
 import { parseFile } from './ingest/parse'
 import type {
-  Anchor, Block, Captured, DepMap, Doc, Note, NoteKind, Settings, Stuck,
+  Anchor, Block, Captured, DepMap, Doc, Folder, Note, NoteKind, Settings, Stuck,
 } from './types'
 import { uuid } from './lib/util'
 
@@ -12,6 +12,7 @@ interface AppStore {
   busy: string | null
   error: string | null
   docs: Doc[]
+  folders: Folder[]
   doc: Doc | null
   blocks: Block[]
   anchors: Anchor[]
@@ -21,10 +22,14 @@ interface AppStore {
 
   init: () => Promise<void>
   refreshDocs: () => Promise<void>
-  importFiles: (files: File[]) => Promise<void>
+  importFiles: (files: File[], folderId?: string | null) => Promise<void>
   openDoc: (id: string) => Promise<void>
   closeDoc: () => void
   deleteDoc: (id: string) => Promise<void>
+  createFolder: (name: string) => Promise<Folder>
+  renameFolder: (id: string, name: string) => Promise<void>
+  deleteFolder: (id: string) => Promise<void>
+  moveDoc: (docId: string, folderId: string | null) => Promise<void>
 
   patchSettings: (patch: Partial<Settings>) => Promise<void>
   saveProvider: (provider: import('./types').ProviderConfig) => Promise<void>
@@ -66,6 +71,7 @@ export const useApp = create<AppStore>()((set, get) => ({
   busy: null,
   error: null,
   docs: [],
+  folders: [],
   doc: null,
   blocks: [],
   anchors: [],
@@ -76,8 +82,11 @@ export const useApp = create<AppStore>()((set, get) => ({
   async init() {
     const settings = (await loadSettings()) ?? defaultSettings()
     await saveSettings(settings)
-    const docs = await db.docs.orderBy('lastReadAt').reverse().toArray()
-    set({ ready: true, settings, docs })
+    const [docs, folders] = await Promise.all([
+      db.docs.orderBy('lastReadAt').reverse().toArray(),
+      db.folders.orderBy('createdAt').toArray(),
+    ])
+    set({ ready: true, settings, docs, folders })
   },
 
   async refreshDocs() {
@@ -85,7 +94,7 @@ export const useApp = create<AppStore>()((set, get) => ({
     set({ docs })
   },
 
-  async importFiles(files) {
+  async importFiles(files, folderId = null) {
     const list = files.filter(Boolean)
     if (!list.length) return
     for (const file of list) {
@@ -115,6 +124,7 @@ export const useApp = create<AppStore>()((set, get) => ({
           pageCount: parsed.pageCount,
           outline: parsed.outline,
           frontierIdx: 0,
+          folderId: folderId ?? null,
           blob: parsed.blob,
         }
         await db.transaction('rw', db.docs, db.blocks, async () => {
@@ -177,6 +187,47 @@ export const useApp = create<AppStore>()((set, get) => ({
     )
     if (get().doc?.id === id) get().closeDoc()
     await get().refreshDocs()
+  },
+
+  async createFolder(name) {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('文件夹名不能为空')
+    if (get().folders.some((f) => f.name === trimmed)) throw new Error('已经有同名文件夹了')
+    const folder: Folder = { id: uuid(), name: trimmed, createdAt: Date.now() }
+    await db.folders.put(folder)
+    set({ folders: [...get().folders, folder] })
+    return folder
+  },
+
+  async renameFolder(id, name) {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('文件夹名不能为空')
+    const folder = get().folders.find((f) => f.id === id)
+    if (!folder) return
+    const updated = { ...folder, name: trimmed }
+    await db.folders.put(updated)
+    set({ folders: get().folders.map((f) => (f.id === id ? updated : f)) })
+  },
+
+  async deleteFolder(id) {
+    // 只删分类，不删文档：里面的文档回到「未分类」
+    await db.transaction('rw', db.folders, db.docs, async () => {
+      await db.docs.where('folderId').equals(id).modify({ folderId: null })
+      await db.folders.delete(id)
+    })
+    set({
+      folders: get().folders.filter((f) => f.id !== id),
+      docs: get().docs.map((d) => (d.folderId === id ? { ...d, folderId: null } : d)),
+      doc: get().doc?.folderId === id ? { ...get().doc!, folderId: null } : get().doc,
+    })
+  },
+
+  async moveDoc(docId, folderId) {
+    await db.docs.update(docId, { folderId })
+    set({
+      docs: get().docs.map((d) => (d.id === docId ? { ...d, folderId } : d)),
+      doc: get().doc?.id === docId ? { ...get().doc!, folderId } : get().doc,
+    })
   },
 
   async patchSettings(patch) {

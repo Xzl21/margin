@@ -1,5 +1,5 @@
 import { db } from '../db'
-import type { Anchor, Block, Doc, Note, Settings, Stuck } from '../types'
+import type { Anchor, Block, Doc, Folder, Note, Settings, Stuck } from '../types'
 
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -16,13 +16,14 @@ async function base64ToBlob(dataUrl: string): Promise<Blob> {
 }
 
 export async function exportBundle(): Promise<Blob> {
-  const [docs, blocks, anchors, notes, stucks, msgs, settingsRow] = await Promise.all([
+  const [docs, blocks, anchors, notes, stucks, msgs, folders, settingsRow] = await Promise.all([
     db.docs.toArray(),
     db.blocks.toArray(),
     db.anchors.toArray(),
     db.notes.toArray(),
     db.stucks.toArray(),
     db.msgs.toArray(),
+    db.folders.toArray(),
     db.settings.get('settings'),
   ])
 
@@ -43,6 +44,7 @@ export async function exportBundle(): Promise<Blob> {
     notes,
     stucks,
     msgs,
+    folders,
     settings: settingsRow?.value,
   }
   return new Blob([JSON.stringify(payload)], { type: 'application/json' })
@@ -56,6 +58,7 @@ interface Bundle {
   notes?: Note[]
   stucks?: Stuck[]
   msgs?: unknown[]
+  folders?: Folder[]
   settings?: Settings
 }
 
@@ -72,17 +75,18 @@ export async function importBundle(file: File): Promise<{ docs: number; notes: n
   }
   await db.transaction(
     'rw',
-    [db.docs, db.blocks, db.anchors, db.notes, db.stucks, db.msgs, db.settings],
+    [db.docs, db.blocks, db.anchors, db.notes, db.stucks, db.msgs, db.folders, db.settings],
     async () => {
       await Promise.all([
         db.docs.clear(), db.blocks.clear(), db.anchors.clear(), db.notes.clear(),
-        db.stucks.clear(), db.msgs.clear(),
+        db.stucks.clear(), db.msgs.clear(), db.folders.clear(),
       ])
       await db.docs.bulkPut(docs)
       if (parsed.blocks?.length) await db.blocks.bulkPut(parsed.blocks)
       if (parsed.anchors?.length) await db.anchors.bulkPut(parsed.anchors)
       if (parsed.notes?.length) await db.notes.bulkPut(parsed.notes)
       if (parsed.stucks?.length) await db.stucks.bulkPut(parsed.stucks)
+      if (parsed.folders?.length) await db.folders.bulkPut(parsed.folders)
       if (parsed.settings) await db.settings.put({ key: 'settings', value: parsed.settings })
     },
   )

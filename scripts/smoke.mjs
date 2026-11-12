@@ -98,6 +98,29 @@ try {
   const sampleBtn = buttons.find((b) => /示例|读一篇/.test(b.textContent ?? ''))
   check('sample button present', Boolean(sampleBtn), buttons.map((b) => (b.textContent ?? '').trim()).slice(0, 8).join(' | '))
 
+  // 书架分类文件夹
+  const rail = doc.querySelector('.folder-rail')
+  check('folder rail present', Boolean(rail), (rail?.textContent ?? '').replace(/\s+/g, ' ').slice(0, 60))
+  const newFolderBtn = [...(rail?.querySelectorAll('button') ?? [])].find((b) => /新建文件夹/.test(b.textContent ?? ''))
+  check('new folder button present', Boolean(newFolderBtn))
+  if (rail && newFolderBtn) {
+    newFolderBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await wait(120)
+    const input = rail.querySelector('.folder-form input')
+    check('folder input appears', Boolean(input))
+    if (input) {
+      const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set
+      setter.call(input, '测试分类')
+      input.dispatchEvent(new win.Event('input', { bubbles: true }))
+      await wait(80)
+      const okBtn = [...rail.querySelectorAll('.folder-form button')].find((b) => /✓/.test(b.textContent ?? ''))
+      okBtn?.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+      await wait(400)
+      const items = [...rail.querySelectorAll('.folder-item')].map((b) => (b.textContent ?? '').trim())
+      check('folder created', items.some((t) => /测试分类/.test(t)), items.join(' | '))
+    }
+  }
+
   if (sampleBtn) {
     sampleBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
     await wait(2000)

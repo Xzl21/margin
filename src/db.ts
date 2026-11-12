@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import type {
-  AiMsg, Anchor, Block, CacheRow, Doc, Note, Settings, Stuck,
+  AiMsg, Anchor, Block, CacheRow, Doc, Folder, Note, Settings, Stuck,
 } from './types'
 import { defaultSettings, upgradeLegacyModels } from './ai/presets'
 
@@ -13,6 +13,7 @@ export class MarginDB extends Dexie {
   msgs!: Table<AiMsg, string>
   cache!: Table<CacheRow, string>
   settings!: Table<{ key: string; value: unknown }, string>
+  folders!: Table<Folder, string>
 
   constructor() {
     super('margin-reader')
@@ -25,6 +26,18 @@ export class MarginDB extends Dexie {
       msgs: 'id, docId, anchorId, createdAt',
       cache: 'key, createdAt',
       settings: 'key',
+    })
+    // v2：书架分类文件夹
+    this.version(2).stores({
+      docs: 'id, addedAt, lastReadAt, folderId',
+      blocks: 'id, docId, idx, [docId+idx]',
+      anchors: 'id, docId, blockId, blockIdx',
+      notes: 'id, docId, anchorId, createdAt',
+      stucks: 'id, docId, resolved, createdAt',
+      msgs: 'id, docId, anchorId, createdAt',
+      cache: 'key, createdAt',
+      settings: 'key',
+      folders: 'id, createdAt',
     })
   }
 }

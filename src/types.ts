@@ -55,7 +55,16 @@ export interface Doc {
   map?: DepMap
   /** 已读到的最远块序号，用于「不剧透」 */
   frontierIdx: number
+  /** 所属文件夹；空或不存在表示未分类 */
+  folderId?: string | null
   blob?: Blob
+}
+
+/** 书架上的自定义分类文件夹 */
+export interface Folder {
+  id: string
+  name: string
+  createdAt: number
 }
 
 /** 相对页面左上角的归一化矩形（0..1） */
