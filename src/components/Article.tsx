@@ -150,7 +150,7 @@ export function HtmlArticle({
         </span>
       ))}
       <div className="article-end">
-        <span>— 读到此处，回头看看卡点日志 —</span>
+        <span>— 读到此处，回头看看页边写过什么 —</span>
         <small>{doc.title}</small>
       </div>
     </div>

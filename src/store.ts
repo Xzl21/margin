@@ -283,8 +283,8 @@ export const useApp = create<AppStore>()((set, get) => ({
       (a) => a.blockId === captured.blockId && a.quote.exact === captured.quote,
     )
     if (same) {
-      if (same.kind === 'mark') return same
-      // 这段已经被批注/卡点占着，就顺手把它也当划线显示，不再新建重复锚点。
+      if (same.kind) return same
+      // 这段已经是批注的锚点，就顺手把它也当划线显示，不再新建重复锚点。
       const updated: Anchor = { ...same, kind: 'mark' }
       await db.anchors.put(updated)
       set({ anchors: get().anchors.map((a) => (a.id === same.id ? updated : a)) })
