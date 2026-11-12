@@ -3,6 +3,7 @@ import { providerById, routeReady, searchReady } from './presets'
 import { extractJson, streamChat } from './client'
 import { fetchPageText, searchWeb } from './search'
 import {
+  askMessages,
   buildReadContext,
   conceptMessages,
   critiqueMessages,
@@ -12,7 +13,7 @@ import {
   verifyMessages,
 } from './prompts'
 
-export type Task = 'explain' | 'verify' | 'critique' | 'map'
+export type Task = 'explain' | 'ask' | 'verify' | 'critique' | 'map'
 
 function routeFor(settings: Settings, task: Task) {
   if (!routeReady(settings, task)) {
@@ -175,6 +176,72 @@ export async function runVerify(
         : '（未联网：到「设置 → 联网」配置检索服务后再查证）')
   out += suffix
   onDelta(suffix)
+  return out
+}
+
+/** 提问：原文上下文 + 模型知识 + 可选联网资料，支持在卡片里多轮追问。 */
+export async function runAsk(
+  input: {
+    doc: Doc
+    blocks: Block[]
+    settings: Settings
+    captured: Captured
+    question: string
+    history: { role: 'user' | 'assistant'; text: string }[]
+  },
+  onDelta: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const { provider, model } = routeFor(input.settings, 'ask')
+  const online = searchReady(input.settings)
+  let hits: SearchHit[] = []
+  if (online) {
+    const query = `${input.question} ${input.captured.quote}`.trim().slice(0, 120)
+    hits = await searchWeb(input.settings, query, signal)
+  }
+  const pages: { url: string; text: string }[] = []
+  if (hits.length) {
+    const picked = hits.slice(0, 3)
+    const texts = await Promise.all(
+      picked.map((h) => fetchPageText(h.url, input.settings.proxyBase, signal)),
+    )
+    picked.forEach((h, i) => {
+      const text = texts[i]
+      if (text && text.length > 200) pages.push({ url: h.url, text })
+    })
+  }
+  const messages = askMessages({
+    docTitle: input.doc.title,
+    ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
+    quote: input.captured.quote,
+    history: input.history,
+    question: input.question,
+    hits,
+    pages,
+    online,
+  })
+  let out = ''
+  for await (const piece of streamChat({
+    provider,
+    model,
+    messages,
+    proxyBase: input.settings.proxyBase,
+    signal,
+    temperature: 0.4,
+  })) {
+    out += piece
+    onDelta(piece)
+  }
+  if (hits.length) {
+    const suffix =
+      '\n\n---\n\n**参考资料**\n\n' +
+      hits
+        .slice(0, 5)
+        .map((h, i) => `${i + 1}. [${h.title || h.url}](${h.url})`)
+        .join('\n')
+    out += suffix
+    onDelta(suffix)
+  }
   return out
 }
 

@@ -26,6 +26,7 @@
 
   --hl-ai: rgba(106, 141, 191, 0.18);
   --hl-mark: rgba(255, 214, 102, 0.55);
+  --hl-ask: rgba(124, 156, 196, 0.32);
   --hl-verify-ok: rgba(76, 175, 125, 0.3);
   --hl-verify-unknown: rgba(140, 132, 118, 0.28);
 }
@@ -47,6 +48,7 @@
 
   --hl-ai: rgba(90, 130, 200, 0.2);
   --hl-mark: rgba(255, 208, 80, 0.6);
+  --hl-ask: rgba(110, 150, 205, 0.34);
   --hl-verify-ok: rgba(64, 168, 112, 0.28);
   --hl-verify-unknown: rgba(135, 138, 145, 0.28);
 }
@@ -68,6 +70,7 @@
 
   --hl-ai: rgba(110, 150, 210, 0.25);
   --hl-mark: rgba(230, 190, 90, 0.42);
+  --hl-ask: rgba(120, 155, 200, 0.34);
   --hl-verify-ok: rgba(90, 190, 140, 0.28);
   --hl-verify-unknown: rgba(150, 150, 150, 0.3);
 }
@@ -1106,6 +1109,10 @@ body.panel-resizing .panel-resizer::after {
   background-color: var(--hl-ai);
 }
 
+::highlight(m-ask) {
+  background-color: var(--hl-ask);
+}
+
 ::highlight(m-mark) {
   background-color: var(--hl-mark);
   color: inherit;
@@ -1857,6 +1864,10 @@ body.panel-resizing .panel-resizer::after {
 
 .pdf-hl.mark {
   background: var(--hl-mark);
+}
+
+.pdf-hl.ask {
+  background: var(--hl-ask);
 }
 
 .pdf-hl.verify-ok {
@@ -2737,4 +2748,153 @@ body.panel-resizing .panel-resizer::after {
 .blk math mfrac,
 .blk math mtable {
   font-size: 0.98em;
+}
+
+/* ---- 提问卡片（页边栏与左侧栏共用） ---- */
+.ask-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--hl-ask, var(--accent));
+  border-radius: 10px;
+  background: var(--paper-soft);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.ask-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ask-kind {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.ask-del {
+  margin-left: auto;
+}
+.ask-q {
+  color: var(--ink);
+  font-weight: 600;
+}
+.ask-a {
+  color: var(--ink-2);
+}
+.ask-a > :first-child {
+  margin-top: 0;
+}
+.ask-a > :last-child {
+  margin-bottom: 0;
+}
+.ask-actions {
+  display: flex;
+  gap: 6px;
+}
+.ask-continue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
+}
+.ask-continue textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.ask-continue textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.ask-continue-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.ask-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 2px 16px;
+}
+
+/* ---- 划词后的提问输入框 ---- */
+.ask-box {
+  position: fixed;
+  z-index: 70;
+  width: 350px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 18px 48px rgba(30, 26, 20, 0.18);
+}
+.ask-box-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: grab;
+  user-select: none;
+}
+.ask-box-head .drag-title {
+  flex: 1;
+  font-size: 13px;
+  color: var(--ink);
+}
+.ask-box-quote {
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.ask-box textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper-soft);
+  color: var(--ink);
+}
+.ask-box textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.ask-box-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ask-box-hint {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.rail-cards .ask-card {
+  font-size: 12.5px;
+}
+@media (max-width: 1040px) {
+  .ask-box {
+    width: 320px;
+  }
 }

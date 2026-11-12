@@ -6,6 +6,7 @@ import { longestCommonSubstring, normalizeSpace } from './util'
  * 对应的 ::highlight(m-note-<id>) 规则由 App 按设置动态注入。
  */
 export type HighlightTone =
+  | 'ask'
   | 'note'
   | 'ai'
   | 'mark'

@@ -84,7 +84,7 @@ export interface Anchor {
   page?: number
   rects?: NormRect[]
   /** 'mark' = 只是划了线，不写批注；'verify' = 查证结论的标记；其余（undefined）是批注（含解释/概念）的定位锚点。 */
-  kind?: 'mark' | 'verify'
+  kind?: 'mark' | 'verify' | 'ask'
   /** 仅 kind==='verify' 时有效：证实 / 未证实。 */
   verdict?: 'ok' | 'unknown'
   /** 仅 kind==='verify' 时有效：当时给用户的查证结论原文（可展开查看）。 */
@@ -103,7 +103,7 @@ export interface NoteCategory {
 }
 
 /** 可以自定义颜色的划线类型 */
-export type HighlightKey = 'note' | 'mark' | 'verify-ok' | 'verify-unknown'
+export type HighlightKey = 'note' | 'mark' | 'ask' | 'verify-ok' | 'verify-unknown'
 
 export interface Note {
   id: string
@@ -121,7 +121,27 @@ export interface Note {
   }
 }
 
-export type TaskKind = 'explain' | 'concept' | 'verify' | 'critique' | 'map' | 'recap'
+export type TaskKind = 'explain' | 'concept' | 'verify' | 'critique' | 'map' | 'recap' | 'ask'
+
+/** 一条提问里的单轮消息（提问卡片支持多轮追问） */
+export interface AskTurn {
+  role: 'user' | 'assistant'
+  text: string
+  at: number
+}
+
+/** 挂在某段原文上的一次提问，turns 里是完整的多轮对话 */
+export interface Ask {
+  id: string
+  docId: string
+  anchorId: string
+  /** 第一轮的问题，侧栏列表里当标题用 */
+  question: string
+  turns: AskTurn[]
+  model?: string
+  createdAt: number
+  updatedAt: number
+}
 
 export interface AiMsg {
   id: string
@@ -182,7 +202,7 @@ export interface Route {
 
 export interface Settings {
   providers: ProviderConfig[]
-  routing: Record<'explain' | 'verify' | 'critique' | 'map', Route>
+  routing: Record<'explain' | 'ask' | 'verify' | 'critique' | 'map', Route>
   search: SearchSettings
   stance: 'socratic' | 'corrective'
   noSpoiler: boolean

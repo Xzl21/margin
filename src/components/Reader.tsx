@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useApp } from '../store'
 import { useUi } from '../ui'
-import type { Anchor, Captured, Note, NoteKind } from '../types'
+import type { Anchor, Ask, AskTurn, Captured, Note, NoteKind } from '../types'
 import { HtmlArticle } from './Article'
 import { PdfArticle } from './PdfArticle'
 import { SidePanel } from './SidePanel'
@@ -9,18 +9,24 @@ import { SelectionToolbar } from './SelectionToolbar'
 import { Composer } from './Composer'
 import { ActionDock } from './ActionDock'
 import { HitMenu, type HitAdd } from './HitMenu'
+import { AskBox } from './AskBox'
 import { captureHtmlSelection, capturePdfSelection, rangeForAnchor } from '../lib/anchor'
-import { runConcept, runCritique, runExplain, runMap, runVerify } from '../ai/run'
+import { runAsk, runConcept, runCritique, runExplain, runMap, runVerify } from '../ai/run'
 
 export function Reader() {
   const doc = useApp((s) => s.doc)
   const blocks = useApp((s) => s.blocks)
   const anchors = useApp((s) => s.anchors)
   const notes = useApp((s) => s.notes)
+  const asks = useApp((s) => s.asks)
   const settings = useApp((s) => s.settings)
   const closeDoc = useApp((s) => s.closeDoc)
   const ensureAnchor = useApp((s) => s.ensureAnchor)
   const ensureMark = useApp((s) => s.ensureMark)
+  const ensureAsk = useApp((s) => s.ensureAsk)
+  const addAsk = useApp((s) => s.addAsk)
+  const appendAskTurn = useApp((s) => s.appendAskTurn)
+  const removeAsk = useApp((s) => s.removeAsk)
   const ensureVerify = useApp((s) => s.ensureVerify)
   const removeMark = useApp((s) => s.removeMark)
   const patchSettings = useApp((s) => s.patchSettings)
@@ -54,6 +60,9 @@ export function Reader() {
   const [busyNoteId, setBusyNoteId] = useState<string | null>(null)
   const [mapping, setMapping] = useState(false)
   const [hit, setHit] = useState<{ anchor: Anchor; x: number; y: number } | null>(null)
+  const [askBox, setAskBox] = useState<{ cap: Captured; screen: { x: number; y: number } } | null>(null)
+  const [askStream, setAskStream] = useState<{ askId: string; text: string; running: boolean } | null>(null)
+  const askAbortRef = useRef<AbortController | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const panelOpen = settings.panelOpen !== false
 
@@ -298,6 +307,66 @@ export function Reader() {
     )
   }
 
+  /** 提问：先占住锚点、落一条记录，再流式把回答写进卡片，可继续追问。 */
+  const streamAsk = async (askId: string, cap: Captured, question: string, history: AskTurn[]) => {
+    askAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    askAbortRef.current = ctrl
+    setAskStream({ askId, text: '', running: true })
+    let acc = ''
+    try {
+      await runAsk(
+        { doc, blocks, settings, captured: cap, question, history },
+        (delta) => {
+          acc += delta
+          setAskStream({ askId, text: acc, running: true })
+        },
+        ctrl.signal,
+      )
+      if (acc.trim()) await appendAskTurn(askId, 'assistant', acc)
+      setAskStream(null)
+    } catch (err) {
+      const e = err as Error
+      if (e.name === 'AbortError') {
+        if (acc.trim()) await appendAskTurn(askId, 'assistant', acc)
+        setAskStream(null)
+        return
+      }
+      setAskStream(null)
+      setError(e.message || '提问失败了，检查一下模型配置。')
+    }
+  }
+
+  const handleAskOpen = (cap: Captured, screen: { x: number; y: number }) => {
+    window.getSelection()?.removeAllRanges()
+    setCaptured(null)
+    dockCapRef.current = null
+    setAskBox({ cap, screen })
+  }
+
+  const submitAsk = async (question: string) => {
+    const box = askBox
+    if (!box) return
+    setAskBox(null)
+    const anchor = await ensureAsk(box.cap)
+    const ask = await addAsk(anchor.id, question, '', settings.routing.ask.model)
+    setTab('ask')
+    if (settings.panelOpen === false) void patchSettings({ panelOpen: true })
+    await streamAsk(ask.id, box.cap, question, [])
+  }
+
+  const continueAsk = async (ask: Ask, question: string) => {
+    const anchor = anchors.find((a) => a.id === ask.anchorId)
+    if (!anchor) {
+      setError('这条提问的原位锚点丢了，没法继续追问。')
+      return
+    }
+    const history = ask.turns
+    await appendAskTurn(ask.id, 'user', question)
+    setTab('ask')
+    await streamAsk(ask.id, capFromAnchor(anchor), question, history)
+  }
+
   /** 查证结论落成原文标记：证实=绿✓，未证实=灰?。 */
   const handleVerdict = async (verdict: 'ok' | 'unknown') => {
     const cap = dockCapRef.current
@@ -353,7 +422,8 @@ export function Reader() {
     const cap = capFromAnchor(anchor)
     const at = { x: hit?.x ?? 0, y: hit?.y ?? 0 }
     setHit(null)
-    if (kind === 'explain') void handleExplain(cap)
+    if (kind === 'ask') handleAskOpen(cap, at)
+    else if (kind === 'explain') void handleExplain(cap)
     else if (kind === 'concept') void handleConcept(cap)
     else if (kind === 'mark') void handleMark(cap)
     else if (kind === 'note') openComposerFor(cap, at)
@@ -535,6 +605,11 @@ export function Reader() {
             onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
             onRemoveCritique={(n) => void removeCritique(n.id)}
             onDeleteMark={(a) => void removeMark(a.id)}
+          onDeleteAsk={(a) => void removeAsk(a.id)}
+            asks={asks}
+            onAskContinue={(a, q) => void continueAsk(a, q)}
+            onAskStop={() => askAbortRef.current?.abort()}
+            askLive={askStream}
             onClose={() => void patchSettings({ panelOpen: false })}
             mapping={mapping}
             busyNoteId={busyNoteId}
@@ -566,6 +641,11 @@ export function Reader() {
               onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
               onRemoveCritique={(n) => void removeCritique(n.id)}
               onJump={jumpAnchor}
+              asks={asks}
+              onDeleteAsk={(a) => void removeAsk(a.id)}
+              onAskContinue={(a, q) => void continueAsk(a, q)}
+              onAskStop={() => askAbortRef.current?.abort()}
+              askLive={askStream}
             />
           ) : (
             <HtmlArticle
@@ -581,6 +661,11 @@ export function Reader() {
               onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
               onRemoveCritique={(n) => void removeCritique(n.id)}
               onJump={jumpAnchor}
+              asks={asks}
+              onDeleteAsk={(a) => void removeAsk(a.id)}
+              onAskContinue={(a, q) => void continueAsk(a, q)}
+              onAskStop={() => askAbortRef.current?.abort()}
+              askLive={askStream}
             />
           )}
         </div>
@@ -591,6 +676,7 @@ export function Reader() {
           captured={captured}
           onExplain={() => void handleExplain(captured)}
           onConcept={() => void handleConcept(captured)}
+          onAsk={(screen) => handleAskOpen(captured, screen)}
           onMark={() => void handleMark(captured)}
           onVerify={() => void handleVerify(captured)}
           onNote={(screen) => openComposerFor(captured, screen)}
@@ -605,12 +691,23 @@ export function Reader() {
         <HitMenu
           anchor={hit.anchor}
           notes={notes.filter((n) => n.anchorId === hit.anchor.id)}
+          asks={asks.filter((a) => a.anchorId === hit.anchor.id)}
           x={hit.x}
           y={hit.y}
           onClose={() => setHit(null)}
           onDeleteNote={(n) => void removeNote(n.id)}
           onDeleteMark={(a) => void removeMark(a.id)}
+          onDeleteAsk={(a) => void removeAsk(a.id)}
           onAdd={handleHitAdd}
+        />
+      )}
+
+      {askBox && (
+        <AskBox
+          screen={askBox.screen}
+          quote={askBox.cap.quote}
+          onClose={() => setAskBox(null)}
+          onSubmit={(q) => void submitAsk(q)}
         />
       )}
 

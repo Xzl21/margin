@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Anchor, Block, Doc, Note, Settings } from '../types'
+import type { Anchor, Ask, Block, Doc, Note, Settings } from '../types'
 import { paintHtmlHighlights, rangeForAnchor } from '../lib/anchor'
 import { escapeHtml, sanitizeHtml } from '../lib/markdown'
 import { MarginRail } from './MarginRail'
@@ -9,6 +9,7 @@ interface Props {
   blocks: Block[]
   anchors: Anchor[]
   notes: Note[]
+  asks: Ask[]
   settings: Settings
   showRail: boolean
   busyNoteId: string | null
@@ -17,11 +18,15 @@ interface Props {
   onUpdateNote: (note: Note, body: string, kind: string) => void
   onRemoveCritique: (note: Note) => void
   onJump: (anchor: Anchor) => void
+  onDeleteAsk: (ask: Ask) => void
+  onAskContinue: (ask: Ask, question: string) => void
+  onAskStop: () => void
+  askLive: { askId: string; text: string; running: boolean } | null
 }
 
 export function HtmlArticle({
-  doc, blocks, anchors, notes, settings, showRail, busyNoteId, onCritique, onDeleteNote, onUpdateNote,
-  onRemoveCritique, onJump,
+  doc, blocks, anchors, notes, asks, settings, showRail, busyNoteId, onCritique, onDeleteNote, onUpdateNote,
+  onRemoveCritique, onJump, onDeleteAsk, onAskContinue, onAskStop, askLive,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [badges, setBadges] = useState<{ id: string; ok: boolean; x: number; y: number }[]>([])
@@ -63,7 +68,9 @@ export function HtmlArticle({
             : ('verify-ok' as const)
           : anchor.kind === 'mark'
             ? ('mark' as const)
-            : ('note' as const)
+            : anchor.kind === 'ask'
+              ? ('ask' as const)
+              : ('note' as const)
       return { anchor, tone }
     })
     const timer = window.setTimeout(() => {
@@ -112,7 +119,7 @@ export function HtmlArticle({
     }
   }, [blocks])
 
-  const revision = `${blocks.length}:${settings.fontSize}:${anchors.length}:${notes.length}:${layoutTick}`
+  const revision = `${blocks.length}:${settings.fontSize}:${anchors.length}:${notes.length}:${asks.length}:${layoutTick}`
   return (
     <div className={`article-body ${showRail ? '' : 'no-rail'}`} ref={ref} style={{ fontSize: settings.fontSize }}>
       <div className="article-main">
@@ -133,6 +140,7 @@ export function HtmlArticle({
         <MarginRail
           anchors={anchors}
           notes={notes}
+          asks={asks}
           settings={settings}
           busyNoteId={busyNoteId}
           onCritique={onCritique}
@@ -140,6 +148,10 @@ export function HtmlArticle({
           onUpdate={onUpdateNote}
           onRemoveCritique={onRemoveCritique}
           onJump={onJump}
+          onDeleteAsk={onDeleteAsk}
+          onAskContinue={onAskContinue}
+          onAskStop={onAskStop}
+          askLive={askLive}
           getRect={locate}
           revision={revision}
           emptyHint="选中正文里的句子，写下的批注会出现在这一栏，和那句话对齐。"

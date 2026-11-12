@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import type { Anchor, Block, Doc, Note, Settings } from '../types'
+import type { Anchor, Ask, Block, Doc, Note, Settings } from '../types'
 import type { PanelTab } from '../ui'
 import { NoteCard } from './Notes'
+import { AskCard } from './AskCard'
 import { renderMarkdown } from '../lib/markdown'
 import { topoOrder } from '../ai/prompts'
 
@@ -10,6 +11,7 @@ interface Props {
   blocks: Block[]
   anchors: Anchor[]
   notes: Note[]
+  asks: Ask[]
   settings: Settings
   tab: PanelTab
   onTab: (tab: PanelTab) => void
@@ -21,6 +23,10 @@ interface Props {
   onUpdateNote: (note: Note, body: string, kind: string) => void
   onRemoveCritique: (note: Note) => void
   onDeleteMark: (anchor: Anchor) => void
+  onDeleteAsk: (ask: Ask) => void
+  onAskContinue: (ask: Ask, question: string) => void
+  onAskStop: () => void
+  askLive: { askId: string; text: string; running: boolean } | null
   onClose: () => void
   mapping: boolean
   busyNoteId: string | null
@@ -35,9 +41,10 @@ const KIND_LABEL: Record<string, string> = {
 }
 
 export function SidePanel({
-  doc, blocks, anchors, notes, settings, tab, onTab, onJumpBlock, onJumpAnchor,
+  doc, blocks, anchors, notes, asks, settings, tab, onTab, onJumpBlock, onJumpAnchor,
   onGenerateMap, onCritique, onDeleteNote, onUpdateNote, onRemoveCritique,
-  onDeleteMark, onClose, mapping, busyNoteId,
+  onDeleteMark, onDeleteAsk, onAskContinue, onAskStop, askLive,
+  onClose, mapping, busyNoteId,
 }: Props) {
   const marks = anchors.filter((a) => a.kind === 'mark')
   const verifies = anchors.filter((a) => a.kind === 'verify')
@@ -51,6 +58,7 @@ export function SidePanel({
         {([
           ['outline', '大纲'],
           ['notes', `批注 ${notes.length}`],
+          ['ask', `提问 ${asks.length}`],
           ['mark', `划线 ${marks.length}`],
           ['verify', `查证 ${verifies.length}`],
           ['route', '路线'],
@@ -117,6 +125,33 @@ export function SidePanel({
                   onDelete={onDeleteNote}
                   onUpdate={onUpdateNote}
                   onRemoveCritique={onRemoveCritique}
+                  onJump={onJumpAnchor}
+                />
+              ))}
+          </div>
+        )}
+
+        {tab === 'ask' && (
+          <div className="ask-list">
+            <div className="panel-note">
+              提问不占划线分类。每条记录里可以接着追问，AI 会带着这段上下文和之前几轮一起回答。
+            </div>
+            {asks.length === 0 && (
+              <p className="empty">还没有提问。选中一段文字，点「提问」，先写下你想问的。</p>
+            )}
+            {asks
+              .slice()
+              .sort((a, b) => blockIdxOfAsk(a, anchors) - blockIdxOfAsk(b, anchors))
+              .map((ask) => (
+                <AskCard
+                  key={ask.id}
+                  ask={ask}
+                  anchor={anchors.find((a) => a.id === ask.anchorId)}
+                  live={askLive?.askId === ask.id ? askLive.text : null}
+                  running={askLive?.askId === ask.id && askLive.running}
+                  onContinue={onAskContinue}
+                  onStop={onAskStop}
+                  onDelete={onDeleteAsk}
                   onJump={onJumpAnchor}
                 />
               ))}
@@ -275,6 +310,10 @@ function VerifyItem({ anchor, onJump, onDelete }: {
       </div>
     </div>
   )
+}
+
+function blockIdxOfAsk(ask: Ask, anchors: Anchor[]): number {
+  return anchors.find((a) => a.id === ask.anchorId)?.blockIdx ?? 0
 }
 
 function blockIdxOf(note: Note, anchors: Anchor[]): number {

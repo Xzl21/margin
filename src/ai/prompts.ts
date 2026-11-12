@@ -2,16 +2,21 @@ import type { ChatMessage } from './client'
 import type { Block, DepMap, DepEdge, DepNode, Note, SearchHit } from '../types'
 
 const MAX_CTX_CHARS = 2600
+/** 允许看全文时给得更宽：多数文章能整篇塞进去，超长文档再按前后各一半截断 */
+const MAX_FULL_CTX_CHARS = 24000
 
 export interface ReadContext {
   before: string
+  /** 只有允许剧透（noSpoiler=false）时才有：读者还没读到、但模型可以看的后文 */
+  after: string
   current: string
   readLabel: string
 }
 
 /**
- * 组装「已读上下文」：noSpoiler 打开时，严格截断到阅读前沿，
- * 让模型看不到读者还没读到的内容——这是数据层的防剧透，不是提示词技巧。
+ * 组装上下文：noSpoiler 打开时，严格截断到阅读前沿，
+ * 让模型看不到读者还没读到的内容——这是数据层的防剧透，不是提示词技巧；
+ * 关掉之后开放全文，前后文都带上，解释和提问可以引用整篇文章。
  */
 export function buildReadContext(
   blocks: Block[],
@@ -20,21 +25,33 @@ export function buildReadContext(
   noSpoiler: boolean,
 ): ReadContext {
   const limit = noSpoiler ? Math.min(blockIdx, frontierIdx) : blocks.length - 1
+  const budget = noSpoiler ? MAX_CTX_CHARS : MAX_FULL_CTX_CHARS
   const parts: string[] = []
   let total = 0
   for (let i = blockIdx - 1; i >= 0 && i <= limit; i -= 1) {
     const t = blocks[i]?.text ?? ''
-    if (total + t.length > MAX_CTX_CHARS) break
+    if (total + t.length > budget / 2) break
     parts.unshift(t)
     total += t.length
+  }
+  const afterParts: string[] = []
+  if (!noSpoiler) {
+    let used = 0
+    for (let i = blockIdx + 1; i < blocks.length; i += 1) {
+      const t = blocks[i]?.text ?? ''
+      if (used + t.length > budget / 2) break
+      afterParts.push(t)
+      used += t.length
+    }
   }
   const current = blocks[blockIdx]?.text ?? ''
   return {
     before: parts.join('\n'),
+    after: afterParts.join('\n'),
     current,
     readLabel: noSpoiler
-      ? `读到第 ${limit + 1} / ${blocks.length} 段`
-      : `已开放全文（第 ${blocks.length} 段）`,
+      ? `读到第 ${limit + 1} / ${blocks.length} 段（只看已读）`
+      : `已开放全文（共 ${blocks.length} 段）`,
   }
 }
 
@@ -67,6 +84,7 @@ export function explainMessages(input: {
         `【你的阅读位置】${input.ctx.readLabel}`,
         `【上文】\n${input.ctx.before || '（这是开头）'}`,
         `【所在段落】\n${input.ctx.current}`,
+        input.ctx.after ? `【后文】\n${input.ctx.after}` : '',
         `【读者划出的文字】\n"${input.quote}"`,
         q ? `【读者的问题】${q}` : '',
       ]
@@ -112,6 +130,7 @@ export function conceptMessages(input: {
         `【你的阅读位置】${input.ctx.readLabel}`,
         `【上文】\n${input.ctx.before || '（这是开头）'}`,
         `【所在段落】\n${input.ctx.current}`,
+        input.ctx.after ? `【后文】\n${input.ctx.after}` : '',
         `【读者选中的文字】\n"${input.quote}"`,
       ].join('\n\n'),
     },
@@ -301,4 +320,63 @@ export function verifyMessages(input: {
       ].join('\n\n'),
     },
   ]
+}
+
+const ASK_SYSTEM = `你是「伴读」的提问助手。读者在某段原文上提了一个问题，你要把问题答清楚。
+
+你可以用三种材料，回答时尽量区分来源：
+1. 【原文上下文】（上文 / 所在段落 / 后文）：能直接回答时，先引用原文再解释；
+2. 【模型知识】：你自带的学科知识，可以用，但不确定的必须写明「不确定」；
+3. 【检索资料】：编号的资料，引用时必须标 [n]，例如 [2]；不要编造 URL、作者、年份、数据。
+
+回答要求：
+- 先直接回答问题（一句话结论），再给展开；总长 ≤ 360 字，除非读者明确要求详细。
+- 原文里没有、只是你推断的，要写明「原文没直说，按上下文推测」。
+- 资料之间互相矛盾时，如实说不一致，并指出哪条更可信。
+- 若资料不足以回答，直说缺什么，不要编。
+- 不做全文总结，不说客套话；读者继续追问时，沿着对话往下答，不要重复已说过的内容。`
+
+/** 提问：上下文 + 多轮历史 + 可选检索资料，一起交给模型。 */
+export function askMessages(input: {
+  docTitle: string
+  ctx: ReadContext
+  quote: string
+  /** 不含本轮问题：本轮问题由调用方接在最后一条 user 消息里 */
+  history: { role: 'user' | 'assistant'; text: string }[]
+  question: string
+  hits: SearchHit[]
+  pages: { url: string; text: string }[]
+  online: boolean
+}): ChatMessage[] {
+  const materials = input.hits.length
+    ? input.hits
+        .map((h, i) => {
+          const page = input.pages.find((p) => p.url === h.url)
+          const head = `[${i + 1}] ${h.title || '(无标题)'}\nURL: ${h.url}\n摘要: ${h.snippet || '(无)'}`
+          return page?.text ? `${head}\n正文节选: ${page.text.slice(0, 900)}` : head
+        })
+        .join('\n\n')
+    : `（这次没有检索到资料${input.online ? '' : '，未联网'}）`
+
+  const context = [
+    `【文档】${input.docTitle}`,
+    `【阅读状态】${input.ctx.readLabel}`,
+    `【上文】\n${input.ctx.before || '（这是开头）'}`,
+    `【所在段落】\n${input.ctx.current}`,
+    input.ctx.after ? `【后文】\n${input.ctx.after}` : '',
+    `【读者选中的文字】\n"${input.quote}"`,
+    `【检索资料】\n${materials}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: ASK_SYSTEM },
+    { role: 'user', content: context },
+  ]
+  for (const turn of input.history) {
+    messages.push({ role: turn.role, content: turn.text })
+  }
+  messages.push({ role: 'user', content: `【我的问题】${input.question}` })
+  return messages
 }

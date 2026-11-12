@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Captured } from './types'
 
-export type PanelTab = 'outline' | 'notes' | 'mark' | 'verify' | 'route'
+export type PanelTab = 'outline' | 'notes' | 'ask' | 'mark' | 'verify' | 'route'
 
 export interface DockState {
   title: string

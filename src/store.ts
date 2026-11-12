@@ -3,7 +3,7 @@ import { db, loadSettings, saveSettings } from './db'
 import { defaultSettings } from './ai/presets'
 import { parseFile } from './ingest/parse'
 import type {
-  Anchor, Block, Captured, DepMap, Doc, Folder, Note, NoteKind, Settings,
+  Anchor, Ask, Block, Captured, DepMap, Doc, Folder, Note, NoteKind, Settings,
 } from './types'
 import { uuid } from './lib/util'
 
@@ -17,6 +17,7 @@ interface AppStore {
   blocks: Block[]
   anchors: Anchor[]
   notes: Note[]
+  asks: Ask[]
   settings: Settings
 
   init: () => Promise<void>
@@ -35,6 +36,7 @@ interface AppStore {
   removeProvider: (id: string) => Promise<void>
 
   ensureAnchor: (captured: Captured) => Promise<Anchor>
+  ensureAsk: (captured: Captured) => Promise<Anchor>
   ensureMark: (captured: Captured) => Promise<Anchor>
   ensureVerify: (captured: Captured, verdict: 'ok' | 'unknown', text?: string) => Promise<Anchor>
   removeMark: (id: string) => Promise<void>
@@ -43,6 +45,10 @@ interface AppStore {
   removeNote: (id: string) => Promise<void>
   saveCritique: (noteId: string, text: string, mode: Settings['stance'], model: string) => Promise<void>
   removeCritique: (noteId: string) => Promise<void>
+
+  addAsk: (anchorId: string, question: string, answer: string, model?: string) => Promise<Ask>
+  appendAskTurn: (id: string, role: 'user' | 'assistant', text: string) => Promise<void>
+  removeAsk: (id: string) => Promise<void>
 
   setMap: (map: DepMap) => Promise<void>
   advanceFrontier: (idx: number) => void
@@ -78,6 +84,7 @@ export const useApp = create<AppStore>()((set, get) => ({
   blocks: [],
   anchors: [],
   notes: [],
+  asks: [],
   settings: defaultSettings(),
 
   async init() {
@@ -152,16 +159,19 @@ export const useApp = create<AppStore>()((set, get) => ({
       const anchorIds = new Set(anchors.map((a) => a.id))
       const allNotes = await db.notes.where('docId').equals(id).toArray()
       const notes = allNotes.filter((n) => anchorIds.has(n.anchorId)).sort((a, b) => a.createdAt - b.createdAt)
+      const allAsks = await db.asks.where('docId').equals(id).toArray()
+      const asks = allAsks.filter((a) => anchorIds.has(a.anchorId)).sort((a, b) => a.createdAt - b.createdAt)
       // 只有被批注引用过、或用户明确划了线/标了查证结论的锚点才该留下：以前的版本会在「解释」
       // 时就落一个锚点，结果没存成批注也会在正文里留一道划线。这里顺手清掉这些孤儿锚点。
-      const used = new Set([...notes.map((n) => n.anchorId)])
-      const keep = (a: Anchor) => used.has(a.id) || a.kind === 'mark' || a.kind === 'verify'
+      const used = new Set([...notes.map((n) => n.anchorId), ...asks.map((a) => a.anchorId)])
+      const keep = (a: Anchor) =>
+        used.has(a.id) || a.kind === 'mark' || a.kind === 'verify' || a.kind === 'ask'
       const orphans = anchors.filter((a) => !keep(a))
       if (orphans.length) await db.anchors.bulkDelete(orphans.map((a) => a.id))
       const keptAnchors = anchors.filter(keep)
       const updated: Doc = { ...doc, lastReadAt: Date.now(), frontierIdx: Math.max(doc.frontierIdx, 0) }
       await db.docs.put(updated)
-      set({ doc: updated, blocks, anchors: keptAnchors, notes, busy: null })
+      set({ doc: updated, blocks, anchors: keptAnchors, notes, asks, busy: null })
       void get().refreshDocs()
     } catch (err) {
       set({ busy: null, error: err instanceof Error ? err.message : String(err) })
@@ -169,18 +179,19 @@ export const useApp = create<AppStore>()((set, get) => ({
   },
 
   closeDoc() {
-    set({ doc: null, blocks: [], anchors: [], notes: [] })
+    set({ doc: null, blocks: [], anchors: [], notes: [], asks: [] })
   },
 
   async deleteDoc(id) {
     await db.transaction(
       'rw',
-      [db.docs, db.blocks, db.anchors, db.notes, db.msgs, db.cache],
+      [db.docs, db.blocks, db.anchors, db.notes, db.asks, db.msgs, db.cache],
       async () => {
         await db.docs.delete(id)
         await db.blocks.where('docId').equals(id).delete()
         await db.anchors.where('docId').equals(id).delete()
         await db.notes.where('docId').equals(id).delete()
+        await db.asks.where('docId').equals(id).delete()
         await db.msgs.where('docId').equals(id).delete()
       },
     )
@@ -277,6 +288,35 @@ export const useApp = create<AppStore>()((set, get) => ({
     return anchor
   },
 
+  async ensureAsk(captured) {
+    const doc = get().doc
+    if (!doc) throw new Error('没有打开的文档')
+    const same = get().anchors.find(
+      (a) => a.blockId === captured.blockId && a.quote.exact === captured.quote,
+    )
+    if (same) {
+      if (same.kind === 'ask') return same
+      const updated: Anchor = { ...same, kind: 'ask' }
+      await db.anchors.put(updated)
+      set({ anchors: get().anchors.map((a) => (a.id === same.id ? updated : a)) })
+      return updated
+    }
+    const anchor: Anchor = {
+      id: uuid(),
+      docId: doc.id,
+      blockId: captured.blockId,
+      blockIdx: captured.blockIdx,
+      quote: { exact: captured.quote, prefix: captured.prefix, suffix: captured.suffix },
+      page: captured.page,
+      rects: captured.rects,
+      kind: 'ask',
+      createdAt: Date.now(),
+    }
+    await db.anchors.put(anchor)
+    set({ anchors: [...get().anchors, anchor] })
+    return anchor
+  },
+
   async ensureMark(captured) {
     const doc = get().doc
     if (!doc) throw new Error('没有打开的文档')
@@ -338,7 +378,8 @@ export const useApp = create<AppStore>()((set, get) => ({
   },
 
   async removeMark(id) {
-    const used = get().notes.some((n) => n.anchorId === id)
+    const used =
+      get().notes.some((n) => n.anchorId === id) || get().asks.some((a) => a.anchorId === id)
     if (used) {
       // 还有批注挂在上面：只去掉「划线」身份，锚点留着给批注用。
       const anchor = get().anchors.find((a) => a.id === id)
@@ -390,7 +431,8 @@ export const useApp = create<AppStore>()((set, get) => ({
       const anchor = get().anchors.find((a) => a.id === note.anchorId)
       const used =
         notes.some((n) => n.anchorId === note.anchorId) ||
-        anchor?.kind === 'mark' || anchor?.kind === 'verify'
+        get().asks.some((a) => a.anchorId === note.anchorId) ||
+        anchor?.kind === 'mark' || anchor?.kind === 'verify' || anchor?.kind === 'ask'
       if (!used) {
         await db.anchors.delete(note.anchorId)
         set({ notes, anchors: get().anchors.filter((a) => a.id !== note.anchorId) })
@@ -414,6 +456,60 @@ export const useApp = create<AppStore>()((set, get) => ({
     const updated: Note = { ...note, critique: undefined, updatedAt: Date.now() }
     await db.notes.put(updated)
     set({ notes: get().notes.map((n) => (n.id === noteId ? updated : n)) })
+  },
+
+  async addAsk(anchorId, question, answer, model) {
+    const doc = get().doc
+    if (!doc) throw new Error('没有打开的文档')
+    const now = Date.now()
+    const ask: Ask = {
+      id: uuid(),
+      docId: doc.id,
+      anchorId,
+      question: question.trim(),
+      turns: answer.trim()
+        ? [
+            { role: 'user', text: question.trim(), at: now },
+            { role: 'assistant', text: answer, at: now },
+          ]
+        : [{ role: 'user', text: question.trim(), at: now }],
+      model,
+      createdAt: now,
+      updatedAt: now,
+    }
+    await db.asks.put(ask)
+    set({ asks: [...get().asks, ask] })
+    return ask
+  },
+
+  async appendAskTurn(id, role, text) {
+    const ask = get().asks.find((a) => a.id === id)
+    if (!ask) return
+    const updated: Ask = {
+      ...ask,
+      turns: [...ask.turns, { role, text, at: Date.now() }],
+      updatedAt: Date.now(),
+    }
+    await db.asks.put(updated)
+    set({ asks: get().asks.map((a) => (a.id === id ? updated : a)) })
+  },
+
+  async removeAsk(id) {
+    const ask = get().asks.find((a) => a.id === id)
+    if (!ask) return
+    await db.asks.delete(id)
+    const asks = get().asks.filter((a) => a.id !== id)
+    const anchor = get().anchors.find((a) => a.id === ask.anchorId)
+    const stillUsed =
+      get().notes.some((n) => n.anchorId === ask.anchorId) ||
+      asks.some((a) => a.anchorId === ask.anchorId) ||
+      anchor?.kind === 'mark' || anchor?.kind === 'verify'
+    if (!stillUsed) {
+      await db.anchors.delete(ask.anchorId)
+      set({ asks, anchors: get().anchors.filter((a) => a.id !== ask.anchorId) })
+      return
+    }
+    set({ asks })
   },
 
   async setMap(map) {

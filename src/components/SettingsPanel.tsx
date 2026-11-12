@@ -11,11 +11,12 @@ import { HIGHLIGHT_LABELS } from '../ai/presets'
 type Tab = 'models' | 'colors' | 'reading' | 'search' | 'data'
 type TaskKey = keyof Settings['routing']
 
-const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'mark', 'verify-ok', 'verify-unknown']
+const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'ask', 'mark', 'verify-ok', 'verify-unknown']
 
 /** 颜色选择器不接受空串，这里给一个和主题默认接近的初始值；选完才写回设置。 */
 const HL_FALLBACK: Record<HighlightKey, string> = {
   note: '#e2a841',
+  ask: '#7c9cc4',
   mark: '#ffd666',
   'verify-ok': '#4caf7d',
   'verify-unknown': '#8c8476',
@@ -24,6 +25,7 @@ const HL_FALLBACK: Record<HighlightKey, string> = {
 const TASK_LABEL: Record<TaskKey, string> = {
   explain: '划词解释',
   verify: '查证',
+  ask: '提问',
   critique: '批注点评',
   map: '依赖骨架',
 }
@@ -570,8 +572,8 @@ export function SettingsPanel() {
                     onChange={(e) => void patchSettings({ noSpoiler: e.target.checked })}
                   />
                   <span>
-                    让 AI 只看到你已经读过的部分
-                    <small>关闭后，解释与查证可以使用全文上下文。默认开启。</small>
+                    默认让 AI 看到全文（不再遮住后面的内容）
+                    <small>打开「不剧透」后，解释、概念、提问、查证都只用你已经读过的部分。</small>
                   </span>
                 </label>
               </section>

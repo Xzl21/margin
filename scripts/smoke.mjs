@@ -149,6 +149,8 @@ try {
     check('mark tab present', tabs.some((t) => /^划线/.test(t)), tabs.join(' | '))
     check('no stuck tab', !tabs.some((t) => /卡点/.test(t)), tabs.join(' | '))
     check('verify tab present', tabs.some((t) => /^查证/.test(t)), tabs.join(' | '))
+check('ask tab present', tabs.some((t) => /^提问/.test(t)), tabs.join(' | '))
+check('ask tab before mark', tabs.findIndex((t) => /^提问/.test(t)) < tabs.findIndex((t) => /^划线/.test(t)), tabs.join(' | '))
   }
 
   // settings modal

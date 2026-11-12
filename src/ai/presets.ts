@@ -64,6 +64,7 @@ export function normalizeNoteCategories(cats: NoteCategory[] | undefined): NoteC
 export const DEFAULT_HIGHLIGHT_COLORS: Record<HighlightKey, string> = {
   note: '',
   mark: '',
+  ask: '',
   'verify-ok': '',
   'verify-unknown': '',
 }
@@ -71,6 +72,7 @@ export const DEFAULT_HIGHLIGHT_COLORS: Record<HighlightKey, string> = {
 export const HIGHLIGHT_LABELS: Record<HighlightKey, string> = {
   note: '批注',
   mark: '划线',
+  ask: '提问',
   'verify-ok': '查证·证实',
   'verify-unknown': '查证·未证实',
 }
@@ -82,12 +84,13 @@ export function defaultSettings(): Settings {
     providers,
     routing: {
       explain: { ...route },
+      ask: { ...route },
       verify: { ...route },
       critique: { ...route },
       map: { ...route },
     },
     stance: 'socratic',
-    noSpoiler: true,
+    noSpoiler: false,
     fontSize: 18,
     zoom: 1,
     sideWidth: 340,

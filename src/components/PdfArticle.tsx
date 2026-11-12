@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { Anchor, Doc, Note, Settings } from '../types'
+import type { Anchor, Ask, Doc, Note, Settings } from '../types'
 import { MarginRail } from './MarginRail'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
@@ -11,6 +11,7 @@ interface Props {
   doc: Doc
   anchors: Anchor[]
   notes: Note[]
+  asks: Ask[]
   settings: Settings
   showRail: boolean
   busyNoteId: string | null
@@ -20,11 +21,15 @@ interface Props {
   onUpdateNote: (note: Note, body: string, kind: string) => void
   onRemoveCritique: (note: Note) => void
   onJump: (anchor: Anchor) => void
+  onDeleteAsk: (ask: Ask) => void
+  onAskContinue: (ask: Ask, question: string) => void
+  onAskStop: () => void
+  askLive: { askId: string; text: string; running: boolean } | null
 }
 
 export function PdfArticle({
-  doc, anchors, notes, settings, showRail, busyNoteId, onVisibleBlock, onCritique, onDeleteNote,
-  onUpdateNote, onRemoveCritique, onJump,
+  doc, anchors, notes, asks, settings, showRail, busyNoteId, onVisibleBlock, onCritique, onDeleteNote,
+  onUpdateNote, onRemoveCritique, onJump, onDeleteAsk, onAskContinue, onAskStop, askLive,
 }: Props) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -103,6 +108,7 @@ export function PdfArticle({
         <MarginRail
           anchors={anchors}
           notes={notes}
+          asks={asks}
           settings={settings}
           busyNoteId={busyNoteId}
           onCritique={onCritique}
@@ -110,8 +116,12 @@ export function PdfArticle({
           onUpdate={onUpdateNote}
           onRemoveCritique={onRemoveCritique}
           onJump={onJump}
+          onDeleteAsk={onDeleteAsk}
+          onAskContinue={onAskContinue}
+          onAskStop={onAskStop}
+          askLive={askLive}
           getRect={locate}
-          revision={`${pdf.numPages}:${settings.zoom}`}
+          revision={`${pdf.numPages}:${settings.zoom}:${notes.length}:${asks.length}`}
           emptyHint="PDF 里选中的句子写的批注，会出现在这一栏，和页面上那句话对齐。"
         />
       )}
@@ -220,7 +230,7 @@ function PdfPage({
           (anchor.rects ?? []).map((r, i) => (
             <div
               key={`${anchor.id}-${i}`}
-              className={`pdf-hl ${anchor.kind === 'verify' ? (anchor.verdict === 'unknown' ? 'verify-unknown' : 'verify-ok') : anchor.kind === 'mark' ? 'mark' : ''}`}
+              className={`pdf-hl ${anchor.kind === 'verify' ? (anchor.verdict === 'unknown' ? 'verify-unknown' : 'verify-ok') : anchor.kind === 'mark' ? 'mark' : anchor.kind === 'ask' ? 'ask' : ''}`}
               data-anchor={anchor.id}
               style={{
                 left: `${r.x * 100}%`,

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Anchor, Note, Settings } from '../types'
+import type { Anchor, Ask, Note, Settings } from '../types'
 import { NoteCard } from './Notes'
+import { AskCard } from './AskCard'
 
 interface Props {
   anchors: Anchor[]
   notes: Note[]
+  asks: Ask[]
   settings: Settings
   busyNoteId?: string | null
   onCritique: (note: Note) => void
@@ -12,6 +14,10 @@ interface Props {
   onUpdate: (note: Note, body: string, kind: string) => void
   onRemoveCritique: (note: Note) => void
   onJump: (anchor: Anchor) => void
+  onDeleteAsk: (ask: Ask) => void
+  onAskContinue: (ask: Ask, question: string) => void
+  onAskStop: () => void
+  askLive: { askId: string; text: string; running: boolean } | null
   /** 返回这条批注对应原文位置在视口里的矩形（找不到时返回 null） */
   getRect: (anchor: Anchor) => DOMRect | null
   /** 布局可能变化的信号：滚动区尺寸、缩放、重排后变化时换一个值即可触发重测 */
@@ -23,6 +29,7 @@ interface Group {
   anchorId: string
   anchor: Anchor | null
   notes: Note[]
+  asks: Ask[]
 }
 
 /** 卡片里第一行文字的矩形：用来把“卡片首行”和“正文那一行”对齐 */
@@ -47,7 +54,8 @@ function firstLineBox(el: HTMLElement): DOMRect | null {
  * 批注栏的 top。这样卡片贴着的是真正的划线位置，而不是段落的粗略顶部。
  */
 export function MarginRail({
-  anchors, notes, settings, busyNoteId, onCritique, onDelete, onUpdate, onRemoveCritique, onJump,
+  anchors, notes, asks, settings, busyNoteId, onCritique, onDelete, onUpdate, onRemoveCritique, onJump,
+  onDeleteAsk, onAskContinue, onAskStop, askLive,
   getRect, revision, emptyHint,
 }: Props) {
   const railRef = useRef<HTMLElement>(null)
@@ -57,22 +65,30 @@ export function MarginRail({
   getRectRef.current = getRect
 
   const groups = useMemo<Group[]>(() => {
-    const byAnchor = new Map<string, Note[]>()
+    const notesByAnchor = new Map<string, Note[]>()
     for (const note of notes) {
-      const list = byAnchor.get(note.anchorId) ?? []
+      const list = notesByAnchor.get(note.anchorId) ?? []
       list.push(note)
-      byAnchor.set(note.anchorId, list)
+      notesByAnchor.set(note.anchorId, list)
     }
-    const items: Group[] = [...byAnchor.entries()].map(([anchorId, list]) => ({
+    const asksByAnchor = new Map<string, Ask[]>()
+    for (const ask of asks) {
+      const list = asksByAnchor.get(ask.anchorId) ?? []
+      list.push(ask)
+      asksByAnchor.set(ask.anchorId, list)
+    }
+    const ids = new Set([...notesByAnchor.keys(), ...asksByAnchor.keys()])
+    const items: Group[] = [...ids].map((anchorId) => ({
       anchorId,
       anchor: anchors.find((a) => a.id === anchorId) ?? null,
-      notes: list,
+      notes: notesByAnchor.get(anchorId) ?? [],
+      asks: asksByAnchor.get(anchorId) ?? [],
     }))
     items.sort((a, b) => (a.anchor?.blockIdx ?? Number.MAX_SAFE_INTEGER) - (b.anchor?.blockIdx ?? Number.MAX_SAFE_INTEGER))
     return items
-  }, [notes, anchors])
+  }, [notes, asks, anchors])
 
-  const signature = groups.map((g) => `${g.anchorId}:${g.notes.length}`).join('|')
+  const signature = groups.map((g) => `${g.anchorId}:${g.notes.length}:${g.asks.length}`).join('|')
 
   useEffect(() => {
     const rail = railRef.current
@@ -89,7 +105,10 @@ export function MarginRail({
       for (const group of groups) {
         const box = groupRefs.current.get(group.anchorId)
         const rect = group.anchor ? getRectRef.current(group.anchor) : null
-        const card = box?.querySelector<HTMLElement>('.note-card') ?? null
+        const card =
+          box?.querySelector<HTMLElement>('.note-card') ??
+          box?.querySelector<HTMLElement>('.ask-card') ??
+          null
         const cardRect = card?.getBoundingClientRect()
         const line = card ? firstLineBox(card) : null
         // 把卡片第一行字的竖直中心，对到正文那一行字的竖直中心：
@@ -146,6 +165,20 @@ export function MarginRail({
         >
           {!group.anchor && <div className="rail-orphan-label">原句没对上，先存这里：</div>}
           <div className="rail-cards">
+            {group.asks.map((ask) => (
+              <AskCard
+                key={ask.id}
+                ask={ask}
+                anchor={group.anchor ?? undefined}
+                compact
+                live={askLive?.askId === ask.id ? askLive.text : null}
+                running={askLive?.askId === ask.id && askLive.running}
+                onContinue={onAskContinue}
+                onStop={onAskStop}
+                onDelete={onDeleteAsk}
+                onJump={onJump}
+              />
+            ))}
             {group.notes.map((note) => (
               <NoteCard
                 key={note.id}

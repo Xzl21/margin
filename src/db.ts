@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { AiMsg, Anchor, Block, CacheRow, Doc, Folder, Note, Route, Settings } from './types'
+import type { AiMsg, Anchor, Ask, Block, CacheRow, Doc, Folder, Note, Route, Settings } from './types'
 import {
   defaultSettings, LEGACY_NOTE_KINDS, normalizeNoteCategories, pruneProviders, upgradeLegacyModels,
 } from './ai/presets'
@@ -13,6 +13,7 @@ export class MarginDB extends Dexie {
   cache!: Table<CacheRow, string>
   settings!: Table<{ key: string; value: unknown }, string>
   folders!: Table<Folder, string>
+  asks!: Table<Ask, string>
 
   constructor() {
     super('margin-reader')
@@ -65,6 +66,8 @@ export class MarginDB extends Dexie {
             if (next) note.kind = next
           })
       })
+    // v6：提问功能回来了，这次一条提问带完整的多轮对话
+    this.version(6).stores({ asks: 'id, docId, anchorId, createdAt' })
   }
 }
 
@@ -81,10 +84,11 @@ export async function loadSettings(): Promise<Settings | undefined> {
     ...base,
     ...stored,
     providers: stored.providers?.length ? stored.providers : base.providers,
-    // 旧设置里这一项叫 ask（提问）；提问功能已删，把它迁移成查证用的路由。
+    // 旧设置里这一项可能缺（提问功能曾被删过），缺了就用默认路由补上。
     routing: {
       explain: storedRouting.explain ?? base.routing.explain,
-      verify: storedRouting.verify ?? storedRouting.ask ?? base.routing.verify,
+      ask: storedRouting.ask ?? base.routing.ask,
+      verify: storedRouting.verify ?? base.routing.verify,
       critique: storedRouting.critique ?? base.routing.critique,
       map: storedRouting.map ?? base.routing.map,
     },
