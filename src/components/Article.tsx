@@ -25,6 +25,8 @@ export function HtmlArticle({
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [badges, setBadges] = useState<{ id: string; ok: boolean; x: number; y: number }[]>([])
+  // 图片、公式、字体这些“迟到的高”会把段落整体推开，需要重新量一次右栏位置。
+  const [layoutTick, setLayoutTick] = useState(0)
 
   const html = useMemo(
     () => blocks.map((b) => (b.html ? sanitizeHtml(b.html) : escapeHtml(b.text).replace(/\n/g, '<br/>'))),
@@ -89,10 +91,28 @@ export function HtmlArticle({
       setBadges(next)
     }, 30)
     return () => window.clearTimeout(timer)
-  }, [anchors, notes, blocks, settings.zoom])
+  }, [anchors, notes, blocks, settings.zoom, layoutTick])
 
-  const revision = `${blocks.length}:${settings.fontSize}:${anchors.length}:${notes.length}`
+  useEffect(() => {
+    const root = ref.current
+    if (!root) return
+    let raf = 0
+    const bump = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => setLayoutTick((n) => n + 1))
+    }
+    const ro = new ResizeObserver(bump)
+    ro.observe(root)
+    root.querySelectorAll('.blk').forEach((el) => ro.observe(el))
+    root.addEventListener('load', bump, true)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+      root.removeEventListener('load', bump, true)
+    }
+  }, [blocks])
 
+  const revision = `${blocks.length}:${settings.fontSize}:${anchors.length}:${notes.length}:${layoutTick}`
   return (
     <div className={`article-body ${showRail ? '' : 'no-rail'}`} ref={ref} style={{ fontSize: settings.fontSize }}>
       <div className="article-main">

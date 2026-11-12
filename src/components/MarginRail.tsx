@@ -25,6 +25,22 @@ interface Group {
   notes: Note[]
 }
 
+/** 卡片里第一行文字的矩形：用来把“卡片首行”和“正文那一行”对齐 */
+function firstLineBox(el: HTMLElement): DOMRect | null {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  let node = walker.nextNode()
+  while (node) {
+    if (node.textContent && node.textContent.trim()) {
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      const rect = Array.from(range.getClientRects()).find((r) => r.height > 0)
+      if (rect) return rect
+    }
+    node = walker.nextNode()
+  }
+  return null
+}
+
 /**
  * 右侧批注栏。它和正文是同一个滚动容器里的两列，但位置不靠“猜”：
  * 每条批注先问 getRect 拿到它在正文里那行高亮的视口矩形，再换算成相对
@@ -65,20 +81,32 @@ export function MarginRail({
     let raf = 0
     const measure = () => {
       const railRect = rail.getBoundingClientRect()
+      // 右栏在正文的 zoom 容器里，getBoundingClientRect 是缩放后的设备像素，
+      // 而写进样式里的 top/transform 是未缩放的 CSS 像素；两者相差一个 zoom。
+      const zoom = railRect.width / Math.max(1, rail.offsetWidth)
       const next: Record<string, number> = {}
       let lastBottom = 0
       for (const group of groups) {
         const box = groupRefs.current.get(group.anchorId)
         const rect = group.anchor ? getRectRef.current(group.anchor) : null
-        // 批注栏和正文同处一个滚动容器，直接用视口坐标相减，缩放多少都对得上。
-        const anchorTop = rect ? rect.top - railRect.top : lastBottom + 18
-        const top = lastBottom === 0 ? Math.max(anchorTop, 0) : Math.max(anchorTop, lastBottom + 12)
-        next[group.anchorId] = Math.round(top)
-        lastBottom = top + (box?.offsetHeight ?? 92)
+        const card = box?.querySelector<HTMLElement>('.note-card') ?? null
+        const cardRect = card?.getBoundingClientRect()
+        const line = card ? firstLineBox(card) : null
+        // 把卡片第一行字的竖直中心，对到正文那一行字的竖直中心：
+        // 行盒比字高（行高 1.95），直接对顶边会看起来偏高半个行距。
+        const anchorCenter = rect ? rect.top + rect.height / 2 : 0
+        const lineOffset = cardRect && line ? line.top - cardRect.top : 0
+        const lineHeight = line?.height ?? 0
+        let anchorTop = rect ? anchorCenter - lineOffset - lineHeight / 2 - railRect.top : lastBottom + 18
+        if (lastBottom > 0) anchorTop = Math.max(anchorTop, lastBottom + 12)
+        anchorTop = Math.max(anchorTop, 0)
+        // 存未缩放的 CSS 像素；stacking 用设备像素算，避免两套单位混在一起。
+        next[group.anchorId] = anchorTop / zoom
+        lastBottom = anchorTop + (cardRect?.height ?? 92)
       }
       setTops((prev) => {
         const keys = Object.keys(next)
-        const same = keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === next[k])
+        const same = keys.length === Object.keys(prev).length && keys.every((k) => Math.abs((prev[k] ?? 0) - next[k]) < 0.5)
         return same ? prev : next
       })
     }
@@ -114,7 +142,7 @@ export function MarginRail({
             else groupRefs.current.delete(group.anchorId)
           }}
           className={`rail-group ${group.anchor ? '' : 'orphan'}`}
-          style={{ top: tops[group.anchorId] ?? 0 }}
+          style={{ transform: `translateY(${tops[group.anchorId] ?? 0}px)` }}
         >
           {!group.anchor && <div className="rail-orphan-label">原句没对上，先存这里：</div>}
           <div className="rail-cards">

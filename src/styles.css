@@ -940,7 +940,8 @@ body.panel-resizing .panel-resizer::after {
   position: absolute;
   left: 0;
   right: 0;
-  transition: top 0.18s ease;
+  top: 0;
+  will-change: transform;
 }
 
 .rail-group.orphan {
