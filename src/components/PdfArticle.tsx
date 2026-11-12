@@ -2,19 +2,34 @@ import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { Anchor, Doc } from '../types'
+import type { Anchor, Doc, Note, Settings } from '../types'
+import { MarginRail } from './MarginRail'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
 interface Props {
   doc: Doc
   anchors: Anchor[]
+  notes: Note[]
+  settings: Settings
+  showRail: boolean
+  busyNoteId: string | null
   onVisibleBlock: (idx: number) => void
+  onCritique: (note: Note) => void
+  onDeleteNote: (note: Note) => void
+  onUpdateNote: (note: Note, body: string, kind: string) => void
+  onRemoveCritique: (note: Note) => void
+  onJump: (anchor: Anchor) => void
 }
 
-export function PdfArticle({ doc, anchors, onVisibleBlock }: Props) {
+export function PdfArticle({
+  doc, anchors, notes, settings, showRail, busyNoteId, onVisibleBlock, onCritique, onDeleteNote,
+  onUpdateNote, onRemoveCritique, onJump,
+}: Props) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [, setLayoutTick] = useState(0)
 
   useEffect(() => {
     if (!doc.blob) return
@@ -41,20 +56,65 @@ export function PdfArticle({ doc, anchors, onVisibleBlock }: Props) {
     }
   }, [doc.id, doc.blob])
 
+  // 页面渲染完成后高度会变（canvas 尺寸落定），让批注栏重新对位。
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    let timer = 0
+    const bump = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => setLayoutTick((n) => n + 1), 120)
+    }
+    const ro = new ResizeObserver(bump)
+    ro.observe(root)
+    return () => {
+      window.clearTimeout(timer)
+      ro.disconnect()
+    }
+  }, [pdf])
+
+  /** 批注要贴的位置：该页上这条高亮第一个矩形的视口坐标 */
+  const locate = (anchor: Anchor): DOMRect | null => {
+    const root = rootRef.current
+    const pageEl = root?.querySelector<HTMLElement>(`[data-pdf-page="${anchor.page}"]`)
+    const rect = anchor.rects?.[0]
+    if (!pageEl || !rect) return null
+    const page = pageEl.getBoundingClientRect()
+    return new DOMRect(page.left + rect.x * page.width, page.top + rect.y * page.height, 1, Math.max(2, rect.h * page.height))
+  }
+
   if (error) return <div className="pdf-error">PDF 打不开：{error}</div>
   if (!pdf) return <div className="pdf-loading"><span className="spinner" /> 正在排版 PDF…</div>
 
   return (
-    <div className="pdf-doc">
-      {Array.from({ length: pdf.numPages }, (_, i) => (
-        <PdfPage
-          key={i + 1}
-          pdf={pdf}
-          num={i + 1}
+    <div className={`pdf-wrap ${showRail ? '' : 'no-rail'}`} ref={rootRef}>
+      <div className="pdf-doc">
+        {Array.from({ length: pdf.numPages }, (_, i) => (
+          <PdfPage
+            key={i + 1}
+            pdf={pdf}
+            num={i + 1}
+            anchors={anchors}
+            onVisibleBlock={onVisibleBlock}
+          />
+        ))}
+      </div>
+      {showRail && (
+        <MarginRail
           anchors={anchors}
-          onVisibleBlock={onVisibleBlock}
+          notes={notes}
+          settings={settings}
+          busyNoteId={busyNoteId}
+          onCritique={onCritique}
+          onDelete={onDeleteNote}
+          onUpdate={onUpdateNote}
+          onRemoveCritique={onRemoveCritique}
+          onJump={onJump}
+          getRect={locate}
+          revision={`${pdf.numPages}:${settings.zoom}`}
+          emptyHint="PDF 里选中的句子写的批注，会出现在这一栏，和页面上那句话对齐。"
         />
-      ))}
+      )}
     </div>
   )
 }

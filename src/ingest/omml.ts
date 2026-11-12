@@ -206,8 +206,9 @@ function conv(el: Element): string {
 }
 
 function wrapNamespace(xml: string): string {
+  // 只给根标签补命名空间；注意要匹配完整的元素名，别把 oMathPara 截成 oMath。
   if (/xmlns:m=/.test(xml)) return xml
-  return xml.replace(/^<m:oMath/, `<m:oMath xmlns:m="${MATH_NS}"`) 
+  return xml.replace(/^<m:(oMath|oMathPara)(?=[\s>])/, `<m:$1 xmlns:m="${MATH_NS}"`)
 }
 
 /**

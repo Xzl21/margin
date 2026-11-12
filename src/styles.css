@@ -907,6 +907,29 @@ body.panel-resizing .panel-resizer::after {
   min-width: 0;
 }
 
+.article-body.no-rail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* PDF：正文和批注栏也是同一屏的两列，共用右侧那根滚动条 */
+.pdf-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w, 300px);
+  column-gap: 30px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px 26px 80px;
+  --rail-w: 300px;
+}
+
+.pdf-wrap.no-rail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pdf-wrap .pdf-doc {
+  padding: 0;
+}
+
 /* 右侧栏：批注卡片挂在段落对应的纵向位置上，和正文共用同一个滚动容器 */
 .article-rail {
   position: relative;
@@ -2175,6 +2198,10 @@ body.panel-resizing .panel-resizer::after {
 
   .article-rail {
     display: none;
+  }
+
+  .pdf-wrap {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .reader-body {

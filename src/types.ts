@@ -1,4 +1,4 @@
-﻿export type DocKind = 'pdf' | 'epub' | 'docx' | 'md' | 'txt'
+export type DocKind = 'pdf' | 'epub' | 'docx' | 'md' | 'txt'
 export type BlockKind = 'h1' | 'h2' | 'h3' | 'h4' | 'p' | 'li' | 'quote' | 'pre' | 'table' | 'line'
 
 export interface Block {
@@ -191,6 +191,10 @@ export interface Settings {
   zoom: number
   /** 右侧栏宽度（px），可拖动调整 */
   sideWidth: number
+  /** 左侧栏（大纲 / 批注 / 划线 / 查证 / 路线）是否展开 */
+  panelOpen: boolean
+  /** 右侧批注栏是否展开 */
+  railOpen: boolean
   theme: 'paper' | 'plain' | 'dark'
   proxyBase: string
   /** 批注类别（可增删改）；颜色用于页边卡片与正文高亮 */

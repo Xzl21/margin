@@ -91,6 +91,8 @@ export function defaultSettings(): Settings {
     fontSize: 18,
     zoom: 1,
     sideWidth: 340,
+    panelOpen: true,
+    railOpen: true,
     theme: 'paper',
     proxyBase: '/api/proxy',
     noteCategories: DEFAULT_NOTE_CATEGORIES.map((c) => ({ ...c })),

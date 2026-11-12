@@ -53,9 +53,9 @@ export function Reader() {
   const dockCapRef = useRef<Captured | null>(null)
   const [busyNoteId, setBusyNoteId] = useState<string | null>(null)
   const [mapping, setMapping] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(true)
   const [hit, setHit] = useState<{ anchor: Anchor; x: number; y: number } | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const panelOpen = settings.panelOpen !== false
 
   /** 拖动分隔条调整左侧栏宽度：左侧栏在左边，往右拖变宽。拖动时只改 CSS 变量，松手才写库 */
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -369,7 +369,7 @@ export function Reader() {
     const anchor = await ensureAnchor(cap)
     await addNote(anchor.id, text, kind)
     setTab('notes')
-    setPanelOpen(true)
+    void patchSettings({ panelOpen: true })
   }
 
   const handleGenerateMap = async () => {
@@ -444,7 +444,7 @@ export function Reader() {
       ?? settings.noteCategories[0]?.id ?? 'custom'
     await addNote(anchor.id, dock.text, dock.noteKind ?? fallback)
     setTab('notes')
-    setPanelOpen(true)
+    void patchSettings({ panelOpen: true })
     closeDock()
   }
 
@@ -473,10 +473,18 @@ export function Reader() {
           <button
             type="button"
             className={panelOpen ? 'ghost active' : 'ghost'}
-            onClick={() => setPanelOpen((v) => !v)}
-            title="显示或收起右侧栏"
+            onClick={() => void patchSettings({ panelOpen: !panelOpen })}
+            title="显示或收起左侧栏（大纲、批注列表、查证、路线）"
           >
             侧栏
+          </button>
+          <button
+            type="button"
+            className={settings.railOpen !== false ? 'ghost active' : 'ghost'}
+            onClick={() => void patchSettings({ railOpen: settings.railOpen === false })}
+            title="显示或收起右侧批注栏（贴着正文划线）"
+          >
+            页边
           </button>
           <button
             type="button"
@@ -527,7 +535,7 @@ export function Reader() {
             onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
             onRemoveCritique={(n) => void removeCritique(n.id)}
             onDeleteMark={(a) => void removeMark(a.id)}
-            onClose={() => setPanelOpen(false)}
+            onClose={() => void patchSettings({ panelOpen: false })}
             mapping={mapping}
             busyNoteId={busyNoteId}
           />
@@ -545,7 +553,20 @@ export function Reader() {
 
         <div className="reader-scroll" ref={articleRef} style={{ '--reader-zoom': settings.zoom } as CSSProperties}>
           {doc.kind === 'pdf' ? (
-            <PdfArticle doc={doc} anchors={anchors} onVisibleBlock={onPdfPageVisible} />
+            <PdfArticle
+              doc={doc}
+              anchors={anchors}
+              notes={notes}
+              settings={settings}
+              showRail={settings.railOpen !== false}
+              busyNoteId={busyNoteId}
+              onVisibleBlock={onPdfPageVisible}
+              onCritique={handleCritique}
+              onDeleteNote={(n) => void removeNote(n.id)}
+              onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
+              onRemoveCritique={(n) => void removeCritique(n.id)}
+              onJump={jumpAnchor}
+            />
           ) : (
             <HtmlArticle
               doc={doc}
@@ -553,6 +574,7 @@ export function Reader() {
               anchors={anchors}
               notes={notes}
               settings={settings}
+              showRail={settings.railOpen !== false}
               busyNoteId={busyNoteId}
               onCritique={handleCritique}
               onDeleteNote={(n) => void removeNote(n.id)}

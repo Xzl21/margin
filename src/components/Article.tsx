@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Anchor, Block, Doc, Note, Settings } from '../types'
 import { paintHtmlHighlights, rangeForAnchor } from '../lib/anchor'
 import { escapeHtml, sanitizeHtml } from '../lib/markdown'
-import { BlockMargin } from './Notes'
+import { MarginRail } from './MarginRail'
 
 interface Props {
   doc: Doc
@@ -10,6 +10,7 @@ interface Props {
   anchors: Anchor[]
   notes: Note[]
   settings: Settings
+  showRail: boolean
   busyNoteId: string | null
   onCritique: (note: Note) => void
   onDeleteNote: (note: Note) => void
@@ -18,16 +19,11 @@ interface Props {
   onJump: (anchor: Anchor) => void
 }
 
-type Group = { key: string; blockId: string | null; notes: Note[] }
-
 export function HtmlArticle({
-  doc, blocks, anchors, notes, settings, busyNoteId, onCritique, onDeleteNote, onUpdateNote,
+  doc, blocks, anchors, notes, settings, showRail, busyNoteId, onCritique, onDeleteNote, onUpdateNote,
   onRemoveCritique, onJump,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
-  const railRef = useRef<HTMLDivElement>(null)
-  const groupRefs = useRef(new Map<string, HTMLDivElement>())
-  const [tops, setTops] = useState<Record<string, number>>({})
   const [badges, setBadges] = useState<{ id: string; ok: boolean; x: number; y: number }[]>([])
 
   const html = useMemo(
@@ -35,86 +31,19 @@ export function HtmlArticle({
     [blocks],
   )
 
-  // 按块归拢批注：右侧栏的卡片和正文段落一一对应，位置由这一步的映射决定。
-  const { notesByBlock, orphanNotes } = useMemo(() => {
-    const map = new Map<string, Note[]>()
-    const known = new Set(blocks.map((b) => b.id))
-    const orphans: Note[] = []
-    for (const note of notes) {
-      const anchor = anchors.find((a) => a.id === note.anchorId)
-      if (!anchor || !known.has(anchor.blockId)) {
-        orphans.push(note)
-        continue
-      }
-      const list = map.get(anchor.blockId) ?? []
-      list.push(note)
-      map.set(anchor.blockId, list)
-    }
-    return { notesByBlock: map, orphanNotes: orphans }
-  }, [notes, anchors, blocks])
-
-  const groups = useMemo<Group[]>(() => {
-    const list: Group[] = []
-    for (const block of blocks) {
-      const items = notesByBlock.get(block.id)
-      if (items?.length) list.push({ key: block.id, blockId: block.id, notes: items })
-    }
-    if (orphanNotes.length) list.push({ key: '__orphans__', blockId: null, notes: orphanNotes })
-    return list
-  }, [blocks, notesByBlock, orphanNotes])
-
-  const groupKey = groups.map((g) => `${g.key}:${g.notes.length}`).join('|')
-
-  // 右侧栏与正文在同一个滚动容器里，卡片用段落的位置定位 → 上下滚动天然同步。
-  useEffect(() => {
+  /** 批注卡片要贴的位置：这条批注在正文里那行高亮的矩形 */
+  const locate = (anchor: Anchor): DOMRect | null => {
     const root = ref.current
-    const rail = railRef.current
-    if (!root || !rail) return
-
-    let raf = 0
-    const measure = () => {
-      const zoom = settings.zoom || 1
-      const railRect = rail.getBoundingClientRect()
-      const next: Record<string, number> = {}
-      let lastBottom = 0
-      for (const group of groups) {
-        const box = groupRefs.current.get(group.key)
-        const blockEl = group.blockId
-          ? root.querySelector<HTMLElement>(`[data-block-id="${group.blockId.replace(/["\\]/g, '\\$&')}"]`)
-          : null
-        const anchorTop = blockEl
-          ? (blockEl.getBoundingClientRect().top - railRect.top) / zoom
-          : lastBottom + 18
-        const top = Math.max(anchorTop, lastBottom === 0 ? 0 : lastBottom + 14)
-        next[group.key] = Math.round(top)
-        lastBottom = top + (box?.offsetHeight ?? 90)
-      }
-      setTops((prev) => {
-        const same = Object.keys(next).length === Object.keys(prev).length &&
-          Object.keys(next).every((k) => prev[k] === next[k])
-        return same ? prev : next
-      })
+    if (!root) return null
+    const blockEl = root.querySelector<HTMLElement>(`[data-block-id="${anchor.blockId.replace(/["\\]/g, '\\$&')}"]`)
+    if (!blockEl) return null
+    const range = rangeForAnchor(blockEl, anchor)
+    if (range) {
+      const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 || r.height > 0)
+      if (rects.length) return rects[0]
     }
-
-    const schedule = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(measure)
-    }
-
-    schedule()
-    const timer = window.setTimeout(schedule, 120)
-    const ro = new ResizeObserver(schedule)
-    ro.observe(root)
-    if (rail.parentElement) ro.observe(rail.parentElement)
-    window.addEventListener('resize', schedule)
-    document.fonts?.ready.then(schedule).catch(() => {})
-    return () => {
-      cancelAnimationFrame(raf)
-      window.clearTimeout(timer)
-      ro.disconnect()
-      window.removeEventListener('resize', schedule)
-    }
-  }, [groups, groupKey, settings.zoom, blocks, notes.length])
+    return blockEl.getBoundingClientRect()
+  }
 
   useEffect(() => {
     const root = ref.current
@@ -162,20 +91,10 @@ export function HtmlArticle({
     return () => window.clearTimeout(timer)
   }, [anchors, notes, blocks, settings.zoom])
 
-  const marginProps = {
-    anchors,
-    categories: settings.noteCategories,
-    stance: settings.stance,
-    busyNoteId,
-    onCritique,
-    onDelete: onDeleteNote,
-    onUpdate: onUpdateNote,
-    onRemoveCritique,
-    onJump,
-  }
+  const revision = `${blocks.length}:${settings.fontSize}:${anchors.length}:${notes.length}`
 
   return (
-    <div className="article-body" ref={ref} style={{ fontSize: settings.fontSize }}>
+    <div className={`article-body ${showRail ? '' : 'no-rail'}`} ref={ref} style={{ fontSize: settings.fontSize }}>
       <div className="article-main">
         {blocks.map((b, i) => (
           <div className="blk-row" key={b.id}>
@@ -190,30 +109,22 @@ export function HtmlArticle({
         ))}
       </div>
 
-      {/* 右侧栏：和正文共用滚动，卡片按段落位置对齐 */}
-      <aside className="article-rail" ref={railRef} aria-label="页边批注">
-        {groups.map((group) => (
-          <div
-            key={group.key}
-            ref={(el) => {
-              if (el) groupRefs.current.set(group.key, el)
-              else groupRefs.current.delete(group.key)
-            }}
-            className={`rail-group ${group.blockId ? '' : 'orphan'}`}
-            style={{ top: tops[group.key] ?? 0 }}
-          >
-            {!group.blockId && (
-              <div className="rail-orphan-label">这些批注的原句在重新导入后没对上，先存这里：</div>
-            )}
-            <BlockMargin notes={group.notes} {...marginProps} />
-          </div>
-        ))}
-        {!groups.length && (
-          <div className="rail-hint">
-            选中正文里的句子，写下的批注会出现在这一栏，和那句话对齐。
-          </div>
-        )}
-      </aside>
+      {showRail && (
+        <MarginRail
+          anchors={anchors}
+          notes={notes}
+          settings={settings}
+          busyNoteId={busyNoteId}
+          onCritique={onCritique}
+          onDelete={onDeleteNote}
+          onUpdate={onUpdateNote}
+          onRemoveCritique={onRemoveCritique}
+          onJump={onJump}
+          getRect={locate}
+          revision={revision}
+          emptyHint="选中正文里的句子，写下的批注会出现在这一栏，和那句话对齐。"
+        />
+      )}
 
       {badges.map((b) => (
         <span
