@@ -2290,3 +2290,99 @@ code {
   padding: 0 0 8px 4px;
 }
 
+/* ---------- 点中已有划线：就地菜单 ---------- */
+
+.hit-menu {
+  position: fixed;
+  z-index: 60;
+  width: 250px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--paper-soft);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.hit-quote {
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.hit-section + .hit-section {
+  margin-top: 8px;
+}
+
+.hit-label {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+.hit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.hit-kind {
+  color: var(--ink-2);
+}
+
+.hit-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mini.armed {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+/* ---------- 查证 / 提问列表 ---------- */
+
+.verify-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 2px;
+  flex-wrap: wrap;
+}
+
+.verify-detail,
+.ask-a {
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.ask-q {
+  margin: 6px 0 4px;
+  color: var(--ink);
+  font-weight: 550;
+  line-height: 1.6;
+}
+
+.critique-del {
+  margin-left: auto;
+}
+
+/* ---------- 侧栏多了两个 tab 后，标题略收紧 ---------- */
+
+.side-tabs button {
+  padding-left: 6px;
+  padding-right: 6px;
+}

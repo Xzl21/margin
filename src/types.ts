@@ -87,6 +87,8 @@ export interface Anchor {
   kind?: 'mark' | 'verify'
   /** 仅 kind==='verify' 时有效：证实 / 未证实。 */
   verdict?: 'ok' | 'unknown'
+  /** 仅 kind==='verify' 时有效：当时给用户的查证结论原文（可展开查看）。 */
+  verifyText?: string
   createdAt: number
 }
 
@@ -114,6 +116,17 @@ export interface Stuck {
   anchorId: string
   question: string
   resolved: boolean
+  createdAt: number
+}
+
+/** 一次「提问」的问答记录，挂在锚点上，可在侧栏展开查看。 */
+export interface Ask {
+  id: string
+  docId: string
+  anchorId: string
+  question: string
+  answer: string
+  model?: string
   createdAt: number
 }
 

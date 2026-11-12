@@ -8,6 +8,7 @@ import { SidePanel } from './SidePanel'
 import { SelectionToolbar } from './SelectionToolbar'
 import { Composer } from './Composer'
 import { ActionDock } from './ActionDock'
+import { HitMenu, type HitAdd } from './HitMenu'
 import { captureHtmlSelection, capturePdfSelection, rangeForAnchor } from '../lib/anchor'
 import { runAsk, runCritique, runExplain, runMap, runVerify } from '../ai/run'
 
@@ -17,6 +18,7 @@ export function Reader() {
   const anchors = useApp((s) => s.anchors)
   const notes = useApp((s) => s.notes)
   const stucks = useApp((s) => s.stucks)
+  const asks = useApp((s) => s.asks)
   const settings = useApp((s) => s.settings)
   const closeDoc = useApp((s) => s.closeDoc)
   const ensureAnchor = useApp((s) => s.ensureAnchor)
@@ -30,6 +32,9 @@ export function Reader() {
   const addStuck = useApp((s) => s.addStuck)
   const setStuckResolved = useApp((s) => s.setStuckResolved)
   const removeStuck = useApp((s) => s.removeStuck)
+  const addAsk = useApp((s) => s.addAsk)
+  const removeAsk = useApp((s) => s.removeAsk)
+  const removeCritique = useApp((s) => s.removeCritique)
   const setMap = useApp((s) => s.setMap)
   const advanceFrontier = useApp((s) => s.advanceFrontier)
   const setError = useApp((s) => s.setError)
@@ -55,6 +60,7 @@ export function Reader() {
   const [busyNoteId, setBusyNoteId] = useState<string | null>(null)
   const [mapping, setMapping] = useState(false)
   const [panelOpen, setPanelOpen] = useState(true)
+  const [hit, setHit] = useState<{ anchor: Anchor; x: number; y: number } | null>(null)
 
   /* ------- 选区捕获 ------- */
   useEffect(() => {
@@ -152,6 +158,58 @@ export function Reader() {
     }
   }
 
+  /* ------- 点中已经划出来的句子：就地删除 / 追加功能 ------- */
+  useEffect(() => {
+    const root = articleRef.current
+    if (!root || !doc) return
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('.no-capture')) return
+      const sel = window.getSelection()
+      if (sel && !sel.isCollapsed) return
+      let found: Anchor | undefined
+      const pdfHl = target?.closest<HTMLElement>('.pdf-hl')
+      if (pdfHl?.dataset.anchor) {
+        found = anchors.find((a) => a.id === pdfHl.dataset.anchor)
+      } else {
+        const pos = document.caretRangeFromPoint?.(e.clientX, e.clientY)
+        const node = pos?.startContainer ?? null
+        const el = node
+          ? ((node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement) as HTMLElement | null)
+              ?.closest<HTMLElement>('.blk')
+          : null
+        if (el) {
+          const blockId = el.dataset.blockId
+          for (const a of anchors) {
+            if (a.blockId !== blockId) continue
+            const range = rangeForAnchor(el, a)
+            if (!range) continue
+            const onIt = Array.from(range.getClientRects()).some(
+              (r) =>
+                r.width > 0 &&
+                e.clientX >= r.left - 2 &&
+                e.clientX <= r.right + 2 &&
+                e.clientY >= r.top - 2 &&
+                e.clientY <= r.bottom + 2,
+            )
+            if (onIt) {
+              found = a
+              break
+            }
+          }
+        }
+      }
+      if (!found) {
+        setHit(null)
+        return
+      }
+      e.preventDefault()
+      setHit({ anchor: found, x: e.clientX, y: e.clientY })
+    }
+    root.addEventListener('click', onClick)
+    return () => root.removeEventListener('click', onClick)
+  }, [anchors, doc])
+
   /** 划词动作一开始就清掉浏览器选区：不落成批注就不该留下任何划线。 */
   const clearSelection = () => {
     setCaptured(null)
@@ -189,7 +247,7 @@ export function Reader() {
   const handleAsk = async (cap: Captured, question: string) => {
     clearSelection()
     dockCapRef.current = cap
-    await runDock(
+    const text = await runDock(
       '提问',
       question.slice(0, 60),
       undefined,
@@ -197,6 +255,12 @@ export function Reader() {
       (onDelta, signal) => runAsk({ doc, blocks, settings, captured: cap, question }, onDelta, signal),
       { thinking: '正在结合已读上下文想…', model: settings.routing.ask.model },
     )
+    if (!text) return
+    // 有答案才落记录，避免「问了一半」在侧栏和原文里留痕。
+    const anchor = await ensureAnchor(cap)
+    await addAsk(anchor.id, question, text, settings.routing.ask.model)
+    setTab('ask')
+    setPanelOpen(true)
   }
 
   const handleVerify = async (cap: Captured) => {
@@ -216,7 +280,7 @@ export function Reader() {
   const handleVerdict = async (verdict: 'ok' | 'unknown') => {
     const cap = dockCapRef.current
     if (!cap) return
-    await ensureVerify(cap, verdict)
+    await ensureVerify(cap, verdict, dock?.text)
     patchDock({ verdict })
     window.setTimeout(() => closeDock(), 600)
   }
@@ -256,6 +320,31 @@ export function Reader() {
     await addStuck(anchor.id, '')
     setTab('stuck')
     setPanelOpen(true)
+  }
+
+  const capFromAnchor = (anchor: Anchor): Captured => ({
+    blockId: anchor.blockId,
+    blockIdx: anchor.blockIdx,
+    quote: anchor.quote.exact,
+    prefix: anchor.quote.prefix,
+    suffix: anchor.quote.suffix,
+    page: anchor.page,
+    rects: anchor.rects,
+  })
+
+  /** 在正文里点中已有的划线，追加一个功能。 */
+  const handleHitAdd = (kind: HitAdd) => {
+    const anchor = hit?.anchor
+    if (!anchor) return
+    const cap = capFromAnchor(anchor)
+    const at = { x: hit?.x ?? 0, y: hit?.y ?? 0 }
+    setHit(null)
+    if (kind === 'explain') void handleExplain(cap)
+    else if (kind === 'mark') void handleMark(cap)
+    else if (kind === 'ask') openComposerFor('ask', cap, at)
+    else if (kind === 'note') openComposerFor('note', cap, at)
+    else if (kind === 'verify') void handleVerify(cap)
+    else void handleQuickStuck(cap)
   }
 
   const handleComposerSubmit = async (text: string, kind: NoteKind) => {
@@ -423,6 +512,7 @@ export function Reader() {
               busyNoteId={busyNoteId}
               onCritique={handleCritique}
               onDeleteNote={(n) => void removeNote(n.id)}
+              onRemoveCritique={(n) => void removeCritique(n.id)}
               onJump={jumpAnchor}
             />
           )}
@@ -435,6 +525,7 @@ export function Reader() {
             anchors={anchors}
             notes={notes}
             stucks={stucks}
+            asks={asks}
             settings={settings}
             tab={tab}
             onTab={setTab}
@@ -443,11 +534,13 @@ export function Reader() {
             onGenerateMap={handleGenerateMap}
             onCritique={handleCritique}
             onDeleteNote={(n) => void removeNote(n.id)}
+            onRemoveCritique={(n) => void removeCritique(n.id)}
             onToggleStuck={(s) => void setStuckResolved(s.id, !s.resolved)}
             onDeleteStuck={(s) => {
               if (window.confirm('删除这个卡点？原文和批注不会受影响。')) void removeStuck(s.id)
             }}
             onDeleteMark={(a) => void removeMark(a.id)}
+            onDeleteAsk={(a) => void removeAsk(a.id)}
             onClose={() => setPanelOpen(false)}
             mapping={mapping}
             busyNoteId={busyNoteId}
@@ -468,6 +561,23 @@ export function Reader() {
             setCaptured(null)
             window.getSelection()?.removeAllRanges()
           }}
+        />
+      )}
+
+      {hit && (
+        <HitMenu
+          anchor={hit.anchor}
+          notes={notes.filter((n) => n.anchorId === hit.anchor.id)}
+          stucks={stucks.filter((s) => s.anchorId === hit.anchor.id)}
+          asks={asks.filter((a) => a.anchorId === hit.anchor.id)}
+          x={hit.x}
+          y={hit.y}
+          onClose={() => setHit(null)}
+          onDeleteNote={(n) => void removeNote(n.id)}
+          onDeleteStuck={(s) => void removeStuck(s.id)}
+          onDeleteAsk={(a) => void removeAsk(a.id)}
+          onDeleteMark={(a) => void removeMark(a.id)}
+          onAdd={handleHitAdd}
         />
       )}
 

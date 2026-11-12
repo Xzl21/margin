@@ -14,11 +14,12 @@ interface Props {
   busyNoteId: string | null
   onCritique: (note: Note) => void
   onDeleteNote: (note: Note) => void
+  onRemoveCritique: (note: Note) => void
   onJump: (anchor: Anchor) => void
 }
 
 export function HtmlArticle({
-  doc, blocks, anchors, notes, stucks, settings, busyNoteId, onCritique, onDeleteNote, onJump,
+  doc, blocks, anchors, notes, stucks, settings, busyNoteId, onCritique, onDeleteNote, onRemoveCritique, onJump,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [badges, setBadges] = useState<{ id: string; ok: boolean; x: number; y: number }[]>([])
@@ -94,6 +95,7 @@ export function HtmlArticle({
         busyNoteId={busyNoteId}
         onCritique={onCritique}
         onDelete={onDeleteNote}
+        onRemoveCritique={onRemoveCritique}
         onJump={onJump}
       />
       {badges.map((b) => (

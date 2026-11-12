@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
-import type { Anchor, Block, Doc, Note, Settings, Stuck } from '../types'
+import { useMemo, useState } from 'react'
+import type { Anchor, Ask, Block, Doc, Note, Settings, Stuck } from '../types'
 import type { PanelTab } from '../ui'
 import { NoteCard } from './Notes'
+import { renderMarkdown } from '../lib/markdown'
 import { topoOrder } from '../ai/prompts'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
   anchors: Anchor[]
   notes: Note[]
   stucks: Stuck[]
+  asks: Ask[]
   settings: Settings
   tab: PanelTab
   onTab: (tab: PanelTab) => void
@@ -18,9 +20,11 @@ interface Props {
   onGenerateMap: () => void
   onCritique: (note: Note) => void
   onDeleteNote: (note: Note) => void
+  onRemoveCritique: (note: Note) => void
   onToggleStuck: (stuck: Stuck) => void
   onDeleteStuck: (stuck: Stuck) => void
   onDeleteMark: (anchor: Anchor) => void
+  onDeleteAsk: (ask: Ask) => void
   onClose: () => void
   mapping: boolean
   busyNoteId: string | null
@@ -35,11 +39,13 @@ const KIND_LABEL: Record<string, string> = {
 }
 
 export function SidePanel({
-  doc, blocks, anchors, notes, stucks, settings, tab, onTab, onJumpBlock, onJumpAnchor,
-  onGenerateMap, onCritique, onDeleteNote, onToggleStuck, onDeleteStuck, onDeleteMark, onClose, mapping, busyNoteId,
+  doc, blocks, anchors, notes, stucks, asks, settings, tab, onTab, onJumpBlock, onJumpAnchor,
+  onGenerateMap, onCritique, onDeleteNote, onRemoveCritique, onToggleStuck, onDeleteStuck, onDeleteMark,
+  onDeleteAsk, onClose, mapping, busyNoteId,
 }: Props) {
   const openStucks = stucks.filter((s) => !s.resolved)
   const marks = anchors.filter((a) => a.kind === 'mark')
+  const verifies = anchors.filter((a) => a.kind === 'verify')
   const outline = doc.outline
   const ordered = useMemo(() => (doc.map ? topoOrder(doc.map) : []), [doc.map])
   const nodeById = useMemo(() => new Map((doc.map?.nodes ?? []).map((n) => [n.id, n])), [doc.map])
@@ -52,6 +58,8 @@ export function SidePanel({
           ['notes', `批注 ${notes.length}`],
           ['mark', `划线 ${marks.length}`],
           ['stuck', `卡点 ${openStucks.length}`],
+          ['verify', `查证 ${verifies.length}`],
+          ['ask', `提问 ${asks.length}`],
           ['route', '路线'],
         ] as [PanelTab, string][]).map(([key, label]) => (
           <button
@@ -113,6 +121,7 @@ export function SidePanel({
                   busy={busyNoteId === note.id}
                   onCritique={onCritique}
                   onDelete={onDeleteNote}
+                  onRemoveCritique={onRemoveCritique}
                   onJump={onJumpAnchor}
                 />
               ))}
@@ -189,6 +198,51 @@ export function SidePanel({
           </div>
         )}
 
+        {tab === 'verify' && (
+          <div className="verify-list">
+            <div className="panel-note">
+              每条记录是你当时对一句话做的查证。点「展开」看当时的结论与出处。
+            </div>
+            {verifies.length === 0 && (
+              <p className="empty">还没有查证记录。选中一句话，点「查证」并标出证实 / 未证实。</p>
+            )}
+            {verifies
+              .slice()
+              .sort((a, b) => a.blockIdx - b.blockIdx)
+              .map((anchor) => (
+                <VerifyItem
+                  key={anchor.id}
+                  anchor={anchor}
+                  onJump={onJumpAnchor}
+                  onDelete={onDeleteMark}
+                />
+              ))}
+          </div>
+        )}
+
+        {tab === 'ask' && (
+          <div className="ask-list">
+            <div className="panel-note">
+              这里的每一次问答都记着它当时问的是哪句话。展开可以回看答案。
+            </div>
+            {asks.length === 0 && (
+              <p className="empty">还没有提问记录。选中一段文字，点「提问」。</p>
+            )}
+            {asks
+              .slice()
+              .sort((a, b) => a.createdAt - b.createdAt)
+              .map((ask) => (
+                <AskItem
+                  key={ask.id}
+                  ask={ask}
+                  anchor={anchors.find((a) => a.id === ask.anchorId)}
+                  onJump={onJumpAnchor}
+                  onDelete={onDeleteAsk}
+                />
+              ))}
+          </div>
+        )}
+
         {tab === 'route' && (
           <div className="route">
             {!doc.map ? (
@@ -251,6 +305,76 @@ export function SidePanel({
         )}
       </div>
     </aside>
+  )
+}
+
+function VerifyItem({ anchor, onJump, onDelete }: {
+  anchor: Anchor
+  onJump: (anchor: Anchor) => void
+  onDelete: (anchor: Anchor) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ok = anchor.verdict !== 'unknown'
+  return (
+    <div className="stuck-item verify-item">
+      <div className="stuck-quote">
+        “{anchor.quote.exact.slice(0, 90)}{anchor.quote.exact.length > 90 ? '…' : ''}”
+      </div>
+      <div className="verify-meta">
+        <span className={`verdict-tag ${ok ? 'ok' : 'unknown'}`}>{ok ? '✓ 证实' : '? 未证实'}</span>
+        {anchor.verifyText && (
+          <button type="button" className="mini" onClick={() => setOpen((v) => !v)}>
+            {open ? '收起明细' : '展开明细'}
+          </button>
+        )}
+      </div>
+      {open && anchor.verifyText && (
+        <div className="verify-detail md" dangerouslySetInnerHTML={{ __html: renderMarkdown(anchor.verifyText) }} />
+      )}
+      <div className="stuck-actions">
+        <button type="button" className="mini" onClick={() => onJump(anchor)}>
+          回到原文
+        </button>
+        <button type="button" className="mini danger" onClick={() => onDelete(anchor)}>
+          删除
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AskItem({ ask, anchor, onJump, onDelete }: {
+  ask: Ask
+  anchor?: Anchor
+  onJump: (anchor: Anchor) => void
+  onDelete: (ask: Ask) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="stuck-item ask-item">
+      {anchor && (
+        <div className="stuck-quote">
+          “{anchor.quote.exact.slice(0, 90)}{anchor.quote.exact.length > 90 ? '…' : ''}”
+        </div>
+      )}
+      <p className="ask-q">{ask.question}</p>
+      {open && (
+        <div className="ask-a md" dangerouslySetInnerHTML={{ __html: renderMarkdown(ask.answer) }} />
+      )}
+      <div className="stuck-actions">
+        <button type="button" className="mini" onClick={() => setOpen((v) => !v)}>
+          {open ? '收起回答' : '展开回答'}
+        </button>
+        {anchor && (
+          <button type="button" className="mini" onClick={() => onJump(anchor)}>
+            回到原文
+          </button>
+        )}
+        <button type="button" className="mini danger" onClick={() => onDelete(ask)}>
+          删除
+        </button>
+      </div>
+    </div>
   )
 }
 

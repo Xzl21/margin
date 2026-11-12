@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Anchor, Note, NoteKind } from '../types'
 import { renderMarkdown } from '../lib/markdown'
 import { formatDate } from '../lib/util'
@@ -19,10 +19,13 @@ interface NoteCardProps {
   busy?: boolean
   onCritique: (note: Note) => void
   onDelete: (note: Note) => void
+  onRemoveCritique?: (note: Note) => void
   onJump?: (anchor: Anchor) => void
 }
 
-export function NoteCard({ note, anchor, compact, stance, busy, onCritique, onDelete, onJump }: NoteCardProps) {
+export function NoteCard({
+  note, anchor, compact, stance, busy, onCritique, onDelete, onRemoveCritique, onJump,
+}: NoteCardProps) {
   const [expanded, setExpanded] = useState(!compact)
   const [showCritique, setShowCritique] = useState(compact)
   const meta = NOTE_KINDS[note.kind]
@@ -49,6 +52,16 @@ export function NoteCard({ note, anchor, compact, stance, busy, onCritique, onDe
           <div className="note-critique-head">
             <span>{note.critique.mode === 'socratic' ? '追问' : '校对'}</span>
             <span className="model-tag">{note.critique.model}</span>
+            {onRemoveCritique && (
+              <button
+                type="button"
+                className="mini danger critique-del"
+                title="删掉这段点评，批注本身保留"
+                onClick={() => onRemoveCritique(note)}
+              >
+                删除
+              </button>
+            )}
           </div>
           <div
             className="md"
@@ -89,43 +102,53 @@ interface MarginNotesProps {
   busyNoteId?: string | null
   onCritique: (note: Note) => void
   onDelete: (note: Note) => void
+  onRemoveCritique?: (note: Note) => void
   onJump: (anchor: Anchor) => void
 }
 
 /** 页边批注：按块在正文里的垂直位置摆放，模拟写在书页边缘的感觉 */
 export function MarginNotes({
-  containerRef, anchors, notes, stance, busyNoteId, onCritique, onDelete, onJump,
+  containerRef, anchors, notes, stance, busyNoteId, onCritique, onDelete, onRemoveCritique, onJump,
 }: MarginNotesProps) {
   const [tops, setTops] = useState<Record<string, number>>({})
   const [stacked, setStacked] = useState<{ note: Note; anchor: Anchor; top: number }[]>([])
+  const rafRef = useRef(0)
 
+  // 位置一律用 offsetTop 算（相对 .article-body 的 padding box），既不受滚动影响，
+  // 也不受 CSS zoom 影响；刚打开文档时要等一帧以上才量得准，所以 rAF + 定时器各补一次。
   useLayoutEffect(() => {
     const root = containerRef.current
     if (!root) return
     const measure = () => {
-      const rootTop = root.getBoundingClientRect().top
-      const byAnchor = new Map<string, Note[]>()
-      for (const n of notes) {
-        const list = byAnchor.get(n.anchorId) ?? []
-        list.push(n)
-        byAnchor.set(n.anchorId, list)
-      }
       const next: Record<string, number> = {}
-      for (const [anchorId] of byAnchor) {
-        const anchor = anchors.find((a) => a.id === anchorId)
+      for (const n of notes) {
+        if (next[n.anchorId] !== undefined) continue
+        const anchor = anchors.find((a) => a.id === n.anchorId)
         if (!anchor) continue
-        const el = root.querySelector<HTMLElement>(`[data-block-id="${anchor.blockId}"]`)
+        const el = root.querySelector<HTMLElement>(`[data-block-id="${cssEscape(anchor.blockId)}"]`)
         if (!el) continue
-        next[anchorId] = Math.max(0, el.getBoundingClientRect().top - rootTop)
+        next[anchor.id] = Math.max(0, el.offsetTop)
       }
       setTops(next)
     }
     measure()
+    rafRef.current = window.requestAnimationFrame(() => {
+      measure()
+      rafRef.current = window.requestAnimationFrame(measure)
+    })
     const ro = new ResizeObserver(measure)
     ro.observe(root)
+    root.querySelectorAll<HTMLElement>('.blk').forEach((el) => ro.observe(el))
+    const scroller = root.closest('.reader-scroll')
+    scroller?.addEventListener('scroll', measure, { passive: true })
     window.addEventListener('resize', measure)
+    document.fonts?.ready.then(measure).catch(() => undefined)
+    const timer = window.setTimeout(measure, 260)
     return () => {
+      window.cancelAnimationFrame(rafRef.current)
+      window.clearTimeout(timer)
       ro.disconnect()
+      scroller?.removeEventListener('scroll', measure)
       window.removeEventListener('resize', measure)
     }
   }, [containerRef, anchors, notes])
@@ -163,10 +186,15 @@ export function MarginNotes({
             busy={busyNoteId === note.id}
             onCritique={onCritique}
             onDelete={onDelete}
+            onRemoveCritique={onRemoveCritique}
             onJump={onJump}
           />
         </div>
       ))}
     </aside>
   )
+}
+
+function cssEscape(value: string): string {
+  return value.replace(/["\\]/g, '\\$&')
 }
