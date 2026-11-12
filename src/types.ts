@@ -83,8 +83,10 @@ export interface Anchor {
   quote: { exact: string; prefix: string; suffix: string }
   page?: number
   rects?: NormRect[]
-  /** 'mark' = 只是划了线，不写批注；其余（undefined）是批注/卡点的定位锚点。 */
-  kind?: 'mark'
+  /** 'mark' = 只是划了线，不写批注；'verify' = 查证结论的标记；其余（undefined）是批注/卡点的定位锚点。 */
+  kind?: 'mark' | 'verify'
+  /** 仅 kind==='verify' 时有效：证实 / 未证实。 */
+  verdict?: 'ok' | 'unknown'
   createdAt: number
 }
 

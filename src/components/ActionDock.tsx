@@ -6,9 +6,11 @@ interface Props {
   onStop: () => void
   onClose: () => void
   onSaveNote?: () => void
+  onVerdict?: (verdict: 'ok' | 'unknown') => void
 }
 
-export function ActionDock({ dock, onStop, onClose, onSaveNote }: Props) {
+export function ActionDock({ dock, onStop, onClose, onSaveNote, onVerdict }: Props) {
+  const canVerdict = Boolean(dock.allowVerdict && !dock.running && dock.text && !dock.error)
   return (
     <div className="action-dock no-capture">
       <header>
@@ -42,6 +44,29 @@ export function ActionDock({ dock, onStop, onClose, onSaveNote }: Props) {
       <footer>
         <span className="model-tag">{dock.model ?? '未标注模型'}</span>
         <div>
+          {canVerdict && !dock.verdict && onVerdict && (
+            <>
+              <button
+                type="button"
+                className="mini ok"
+                title="这条说法与资料一致：在原文上标绿色✓"
+                onClick={() => onVerdict('ok')}
+              >
+                ✓ 证实
+              </button>
+              <button
+                type="button"
+                className="mini unknown"
+                title="资料不足或有出入：在原文上标灰色问号"
+                onClick={() => onVerdict('unknown')}
+              >
+                ? 未证实
+              </button>
+            </>
+          )}
+          {dock.verdict && (
+            <span className={`verdict-tag ${dock.verdict}`}>{dock.verdict === 'ok' ? '✓ 已证实' : '? 未证实'}</span>
+          )}
           {onSaveNote && dock.text && !dock.running && (
             <button type="button" className="ghost" onClick={onSaveNote}>
               存成批注

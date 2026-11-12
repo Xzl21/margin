@@ -14,6 +14,9 @@ export interface DockState {
   noteId?: string
   /** 首字返回前显示的状态语，例如「正在联网检索…」 */
   thinking?: string
+  /** 查证类回答：允许用户在结论上标「证实 / 未证实」 */
+  allowVerdict?: boolean
+  verdict?: 'ok' | 'unknown'
 }
 
 export interface ComposerState {

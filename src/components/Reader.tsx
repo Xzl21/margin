@@ -8,7 +8,7 @@ import { SidePanel } from './SidePanel'
 import { SelectionToolbar } from './SelectionToolbar'
 import { Composer } from './Composer'
 import { ActionDock } from './ActionDock'
-import { captureHtmlSelection, capturePdfSelection } from '../lib/anchor'
+import { captureHtmlSelection, capturePdfSelection, rangeForAnchor } from '../lib/anchor'
 import { runAsk, runCritique, runExplain, runMap, runVerify } from '../ai/run'
 
 export function Reader() {
@@ -21,6 +21,7 @@ export function Reader() {
   const closeDoc = useApp((s) => s.closeDoc)
   const ensureAnchor = useApp((s) => s.ensureAnchor)
   const ensureMark = useApp((s) => s.ensureMark)
+  const ensureVerify = useApp((s) => s.ensureVerify)
   const removeMark = useApp((s) => s.removeMark)
   const patchSettings = useApp((s) => s.patchSettings)
   const addNote = useApp((s) => s.addNote)
@@ -117,7 +118,7 @@ export function Reader() {
     noteId: string | undefined,
     anchor: Anchor | null,
     run: (onDelta: (t: string) => void, signal: AbortSignal) => Promise<string>,
-    opts: { thinking?: string; model?: string } = {},
+    opts: { thinking?: string; model?: string; allowVerdict?: boolean } = {},
   ): Promise<string> => {
     abortRef.current?.abort()
     const ctrl = new AbortController()
@@ -131,6 +132,7 @@ export function Reader() {
       model: opts.model ?? settings.routing.explain.model,
       noteId,
       thinking: opts.thinking,
+      allowVerdict: opts.allowVerdict,
     })
     let acc = ''
     try {
@@ -169,6 +171,14 @@ export function Reader() {
     )
   }
 
+  const openComposerFor = (mode: 'note' | 'ask', cap: Captured, screen: { x: number; y: number }) => {
+    // 打开输入框就收掉浏览器自己的蓝色选区：不落成内容，就不该在原文上留痕。
+    window.getSelection()?.removeAllRanges()
+    setCaptured(null)
+    dockCapRef.current = null
+    openComposer({ mode, captured: cap, screen })
+  }
+
   const handleMark = async (cap: Captured) => {
     setCaptured(null)
     dockCapRef.current = null
@@ -198,8 +208,17 @@ export function Reader() {
       undefined,
       null,
       (onDelta, signal) => runVerify({ doc, blocks, settings, captured: cap }, onDelta, signal),
-      { thinking: '正在联网检索并核对出处…', model: settings.routing.ask.model },
+      { thinking: '正在联网检索并核对出处…', model: settings.routing.ask.model, allowVerdict: true },
     )
+  }
+
+  /** 查证结论落成原文标记：证实=绿✓，未证实=灰?。 */
+  const handleVerdict = async (verdict: 'ok' | 'unknown') => {
+    const cap = dockCapRef.current
+    if (!cap) return
+    await ensureVerify(cap, verdict)
+    patchDock({ verdict })
+    window.setTimeout(() => closeDock(), 600)
   }
 
   const handleCritique = async (note: Note) => {
@@ -244,6 +263,7 @@ export function Reader() {
     const cap = composer.captured
     closeComposer()
     setCaptured(null)
+    window.getSelection()?.removeAllRanges()
     const anchor = await ensureAnchor(cap)
     if (composer.mode === 'note') {
       await addNote(anchor.id, text, kind)
@@ -286,12 +306,38 @@ export function Reader() {
   }
 
   const jumpAnchor = (anchor: Anchor) => {
-    jumpBlock(anchor.blockIdx)
-    window.setTimeout(() => {
-      const el = document.querySelector(`[data-anchor="${anchor.id}"]`)
-      el?.classList.add('flash')
-      window.setTimeout(() => el?.classList.remove('flash'), 1500)
-    }, 350)
+    const root = articleRef.current
+    if (!root) return
+    if (doc.kind === 'pdf') {
+      jumpBlock(anchor.blockIdx)
+      return
+    }
+    const blockEl = root.querySelector<HTMLElement>(
+      `[data-block-id="${anchor.blockId.replace(/["\\]/g, '\\$&')}"]`,
+    )
+    const range = blockEl ? rangeForAnchor(blockEl, anchor) : null
+    const rect = range?.getBoundingClientRect()
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+      jumpBlock(anchor.blockIdx)
+      return
+    }
+    // 准确滚到那句话，而不是滚到整段开头。
+    root.scrollTop += rect.top - root.getBoundingClientRect().top - root.clientHeight * 0.3
+    flashRect(root, rect)
+  }
+
+  /** 在命中的原文位置闪一下，告诉用户「就是这句」。 */
+  const flashRect = (root: HTMLElement, rect: DOMRect) => {
+    const zoom = settings.zoom || 1
+    const base = root.getBoundingClientRect()
+    const spot = document.createElement('div')
+    spot.className = 'anchor-flash'
+    spot.style.left = `${(rect.left - base.left) / zoom - 3}px`
+    spot.style.top = `${(rect.top - base.top) / zoom - 3}px`
+    spot.style.width = `${rect.width / zoom + 6}px`
+    spot.style.height = `${rect.height / zoom + 6}px`
+    root.appendChild(spot)
+    window.setTimeout(() => spot.remove(), 1600)
   }
 
   const saveDockAsNote = async () => {
@@ -414,9 +460,9 @@ export function Reader() {
           captured={captured}
           onExplain={() => void handleExplain(captured)}
           onMark={() => void handleMark(captured)}
-          onAsk={(screen) => openComposer({ mode: 'ask', captured, screen })}
+          onAsk={(screen) => openComposerFor('ask', captured, screen)}
           onVerify={() => void handleVerify(captured)}
-          onNote={(screen) => openComposer({ mode: 'note', captured, screen })}
+          onNote={(screen) => openComposerFor('note', captured, screen)}
           onStuck={() => void handleQuickStuck(captured)}
           onClose={() => {
             setCaptured(null)
@@ -429,7 +475,10 @@ export function Reader() {
         <Composer
           mode={composer.mode}
           screen={composer.screen}
-          onClose={closeComposer}
+          onClose={() => {
+            closeComposer()
+            window.getSelection()?.removeAllRanges()
+          }}
           onSubmit={(text, kind) => void handleComposerSubmit(text, kind)}
         />
       )}
@@ -440,6 +489,7 @@ export function Reader() {
           onStop={() => abortRef.current?.abort()}
           onClose={closeDock}
           onSaveNote={() => void saveDockAsNote()}
+          onVerdict={(v) => void handleVerdict(v)}
         />
       )}
     </div>

@@ -160,7 +160,7 @@ function PdfPage({
           (anchor.rects ?? []).map((r, i) => (
             <div
               key={`${anchor.id}-${i}`}
-              className="pdf-hl"
+              className={`pdf-hl ${anchor.kind === 'verify' ? (anchor.verdict === 'unknown' ? 'verify-unknown' : 'verify-ok') : anchor.kind === 'mark' ? 'mark' : ''}`}
               data-anchor={anchor.id}
               style={{
                 left: `${r.x * 100}%`,

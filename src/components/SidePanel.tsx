@@ -230,6 +230,17 @@ export function SidePanel({
                               .join(' / ')}
                           </p>
                         )}
+                        {node.blockIdx !== undefined && (
+                          <div className="route-actions">
+                            <button
+                              type="button"
+                              className="mini"
+                              onClick={() => node.blockIdx !== undefined && onJumpBlock(node.blockIdx)}
+                            >
+                              回到原文
+                            </button>
+                          </div>
+                        )}
                       </li>
                     )
                   })}

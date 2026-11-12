@@ -26,6 +26,8 @@
   --hl-stuck: rgba(196, 84, 74, 0.24);
   --hl-ai: rgba(106, 141, 191, 0.18);
   --hl-mark: rgba(255, 214, 102, 0.55);
+  --hl-verify-ok: rgba(76, 175, 125, 0.3);
+  --hl-verify-unknown: rgba(140, 132, 118, 0.28);
 }
 
 [data-theme="plain"] {
@@ -45,6 +47,8 @@
   --hl-stuck: rgba(214, 90, 80, 0.25);
   --hl-ai: rgba(90, 130, 200, 0.2);
   --hl-mark: rgba(255, 208, 80, 0.6);
+  --hl-verify-ok: rgba(64, 168, 112, 0.28);
+  --hl-verify-unknown: rgba(135, 138, 145, 0.28);
 }
 
 [data-theme="dark"] {
@@ -64,6 +68,8 @@
   --hl-stuck: rgba(220, 110, 100, 0.3);
   --hl-ai: rgba(110, 150, 210, 0.25);
   --hl-mark: rgba(230, 190, 90, 0.42);
+  --hl-verify-ok: rgba(90, 190, 140, 0.28);
+  --hl-verify-unknown: rgba(150, 150, 150, 0.3);
 }
 
 * {
@@ -1552,6 +1558,18 @@ code {
   background: rgba(226, 168, 65, 0.75);
 }
 
+.pdf-hl.mark {
+  background: var(--hl-mark);
+}
+
+.pdf-hl.verify-ok {
+  background: var(--hl-verify-ok);
+}
+
+.pdf-hl.verify-unknown {
+  background: var(--hl-verify-unknown);
+}
+
 .flash {
   animation: flash 1.4s ease;
 }
@@ -2188,5 +2206,87 @@ code {
   color: var(--ink-faint);
   letter-spacing: 1px;
   margin-right: 2px;
+}
+
+/* ---------- 查证标记 ---------- */
+
+::highlight(m-verify-ok) {
+  background-color: var(--hl-verify-ok);
+}
+
+::highlight(m-verify-unknown) {
+  background-color: var(--hl-verify-unknown);
+}
+
+.verify-badge {
+  position: absolute;
+  z-index: 3;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.verify-badge.ok {
+  color: #fff;
+  background: #33865a;
+}
+
+.verify-badge.unknown {
+  color: #fff;
+  background: #8a8172;
+}
+
+.mini.ok {
+  color: #216b45;
+  border-color: rgba(51, 134, 90, 0.45);
+}
+
+.mini.unknown {
+  color: var(--ink-soft);
+}
+
+.verdict-tag {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.verdict-tag.ok {
+  color: #216b45;
+  background: rgba(51, 134, 90, 0.12);
+}
+
+.verdict-tag.unknown {
+  color: var(--ink-soft);
+  background: var(--paper-soft);
+}
+
+.anchor-flash {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--accent);
+  background: var(--accent-soft);
+  animation: anchor-flash 1.4s ease-out forwards;
+}
+
+@keyframes anchor-flash {
+  0% { opacity: 0; }
+  25% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+.route-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 8px 4px;
 }
 

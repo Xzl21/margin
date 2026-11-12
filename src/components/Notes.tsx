@@ -57,6 +57,11 @@ export function NoteCard({ note, anchor, compact, stance, busy, onCritique, onDe
         </div>
       )}
       <div className="note-actions">
+        {anchor && (
+          <button type="button" className="mini" title="定位到原文这句话" onClick={() => onJump?.(anchor)}>
+            回到原文
+          </button>
+        )}
         <button type="button" className="mini" onClick={() => setExpanded((v) => !v)}>
           {expanded ? '收起' : '展开'}
         </button>
