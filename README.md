@@ -69,7 +69,6 @@ margin/
 │  └─ styles.css    三套主题 + 版面
 ├─ server/          本地静态托管与 /api/proxy（零依赖）
 ├─ functions/api/   Cloudflare Pages 版 /api/proxy
-├─ deploy/          出借自身 Key 的 Worker 示例
 ├─ scripts/         构建产物自检
 └─ dist/            构建产物
 ```
