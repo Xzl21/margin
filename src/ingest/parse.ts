@@ -4,6 +4,7 @@ import mammoth from 'mammoth'
 import MarkdownIt from 'markdown-it'
 import type { Block, DocKind, OutlineNode } from '../types'
 import { blocksToOutline, htmlToBlocks, inferPdfOutline } from './html'
+import { readEpub } from './epub'
 import { countWords, sha256Hex } from '../lib/util'
 import { escapeHtml } from '../lib/markdown'
 
@@ -32,6 +33,7 @@ export function kindOf(file: File): DocKind | null {
   const ext = extOf(file.name)
   if (ext === 'pdf') return 'pdf'
   if (ext === 'docx') return 'docx'
+  if (ext === 'epub') return 'epub'
   if (ext === 'md' || ext === 'markdown') return 'md'
   if (ext === 'txt' || ext === 'text') return 'txt'
   if (file.type === 'application/pdf') return 'pdf'
@@ -40,7 +42,7 @@ export function kindOf(file: File): DocKind | null {
 
 export async function parseFile(file: File): Promise<ParsedDoc> {
   const kind = kindOf(file)
-  if (!kind) throw new Error('暂不支持这种格式：目前支持 PDF / DOCX / Markdown / TXT')
+  if (!kind) throw new Error('暂不支持这种格式：目前支持 PDF / EPUB / DOCX / Markdown / TXT')
   const buffer = await file.arrayBuffer()
   const hash = await sha256Hex(buffer)
   const docId = hash.slice(0, 16)
@@ -65,7 +67,12 @@ export async function parseFile(file: File): Promise<ParsedDoc> {
   }
 
   let html = ''
-  if (kind === 'docx') {
+  let bookTitle = ''
+  if (kind === 'epub') {
+    const book = await readEpub(new Uint8Array(buffer), baseTitle)
+    html = book.html
+    bookTitle = book.title
+  } else if (kind === 'docx') {
     const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
     html = result.value
   } else if (kind === 'md') {
@@ -83,7 +90,7 @@ export async function parseFile(file: File): Promise<ParsedDoc> {
   const firstHeading = blocks.find((b) => b.kind === 'h1')
   return {
     kind,
-    title: firstHeading ? firstHeading.text.slice(0, 80) : baseTitle,
+    title: bookTitle || (firstHeading ? firstHeading.text.slice(0, 80) : baseTitle),
     blocks,
     outline: blocksToOutline(blocks),
     hash,

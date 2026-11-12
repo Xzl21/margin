@@ -1,4 +1,4 @@
-export type DocKind = 'pdf' | 'docx' | 'md' | 'txt'
+﻿export type DocKind = 'pdf' | 'epub' | 'docx' | 'md' | 'txt'
 export type BlockKind = 'h1' | 'h2' | 'h3' | 'h4' | 'p' | 'li' | 'quote' | 'pre' | 'table' | 'line'
 
 export interface Block {

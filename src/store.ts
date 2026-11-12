@@ -64,6 +64,7 @@ function importErrorMessage(err: unknown, name: string): string {
     return `「${name}」不是有效的 PDF，文件可能已损坏。`
   }
   if (/OCR|扫描/i.test(raw)) return raw
+  if (/EPUB|zip 目录|OPF/i.test(raw)) return raw
   return `「${name}」导入失败：${raw}`
 }
 

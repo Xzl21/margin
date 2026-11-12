@@ -7,6 +7,7 @@ import type { Doc, Folder } from '../types'
 
 const KIND_LABEL: Record<Doc['kind'], string> = {
   pdf: 'PDF',
+  epub: 'EPUB',
   docx: 'Word',
   md: 'Markdown',
   txt: '纯文本',
@@ -212,7 +213,7 @@ export function Library() {
           <input
             ref={inputRef}
             type="file"
-            accept=".pdf,.docx,.md,.markdown,.txt"
+            accept=".pdf,.epub,.docx,.md,.markdown,.txt"
             multiple
             hidden
             onChange={(e) => {
@@ -249,7 +250,7 @@ export function Library() {
           <div className="hero-side">
             <HeroArt />
             <div className="hero-drop">
-              <p>把 PDF / Word / Markdown / TXT 拖进来</p>
+              <p>把 PDF / EPUB / Word / Markdown / TXT 拖进来</p>
               <button type="button" className="primary big" onClick={() => inputRef.current?.click()}>
                 选择文件
               </button>

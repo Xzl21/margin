@@ -680,6 +680,11 @@ code {
   border-color: rgba(47, 111, 235, 0.4);
 }
 
+.kind-epub {
+  color: #4f8a5b;
+  border-color: rgba(79, 138, 91, 0.45);
+}
+
 .kind-md {
   color: var(--accent-ink);
   border-color: var(--accent);
