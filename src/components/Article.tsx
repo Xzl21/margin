@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Anchor, Block, Doc, Note, Settings, Stuck } from '../types'
 import { paintHtmlHighlights, rangeForAnchor } from '../lib/anchor'
 import { escapeHtml, sanitizeHtml } from '../lib/markdown'
-import { MarginNotes } from './Notes'
+import { BlockMargin } from './Notes'
 
 interface Props {
   doc: Doc
@@ -30,6 +30,24 @@ export function HtmlArticle({
     () => blocks.map((b) => (b.html ? sanitizeHtml(b.html) : escapeHtml(b.text).replace(/\n/g, '<br/>'))),
     [blocks],
   )
+
+  // 按块归拢批注：页边卡片直接挂在对应段落自己的行里，位置由布局决定，不再靠 JS 量坐标。
+  const { notesByBlock, orphanNotes } = useMemo(() => {
+    const map = new Map<string, Note[]>()
+    const known = new Set(blocks.map((b) => b.id))
+    const orphans: Note[] = []
+    for (const note of notes) {
+      const anchor = anchors.find((a) => a.id === note.anchorId)
+      if (!anchor || !known.has(anchor.blockId)) {
+        orphans.push(note)
+        continue
+      }
+      const list = map.get(anchor.blockId) ?? []
+      list.push(note)
+      map.set(anchor.blockId, list)
+    }
+    return { notesByBlock: map, orphanNotes: orphans }
+  }, [notes, anchors, blocks])
 
   useEffect(() => {
     const root = ref.current
@@ -83,28 +101,48 @@ export function HtmlArticle({
   return (
     <div className="article-body" ref={ref} style={{ fontSize: settings.fontSize }}>
       {blocks.map((b, i) => (
-        <div
-          key={b.id}
-          className={`blk blk-${b.kind}`}
-          data-block-id={b.id}
-          data-idx={b.idx}
-          data-page={b.page}
-          dangerouslySetInnerHTML={{ __html: html[i] }}
-        />
+        <div className="blk-row" key={b.id}>
+          <div
+            className={`blk blk-${b.kind}`}
+            data-block-id={b.id}
+            data-idx={b.idx}
+            data-page={b.page}
+            dangerouslySetInnerHTML={{ __html: html[i] }}
+          />
+          <BlockMargin
+            notes={notesByBlock.get(b.id) ?? []}
+            anchors={anchors}
+            categories={settings.noteCategories}
+            stance={settings.stance}
+            busyNoteId={busyNoteId}
+            onCritique={onCritique}
+            onDelete={onDeleteNote}
+            onUpdate={onUpdateNote}
+            onRemoveCritique={onRemoveCritique}
+            onJump={onJump}
+          />
+        </div>
       ))}
-      <MarginNotes
-        containerRef={ref}
-        anchors={anchors}
-        notes={notes}
-        categories={settings.noteCategories}
-        stance={settings.stance}
-        busyNoteId={busyNoteId}
-        onCritique={onCritique}
-        onDelete={onDeleteNote}
-        onUpdate={onUpdateNote}
-        onRemoveCritique={onRemoveCritique}
-        onJump={onJump}
-      />
+
+      {/* 找不到原文位置的批注（文档被重新解析过）也别丢，集中放在文末 */}
+      {orphanNotes.length > 0 && (
+        <div className="blk-row orphan-row">
+          <div className="blk orphan-label">这些批注的原句在重新导入后没对上，先存这里：</div>
+          <BlockMargin
+            notes={orphanNotes}
+            anchors={anchors}
+            categories={settings.noteCategories}
+            stance={settings.stance}
+            busyNoteId={busyNoteId}
+            onCritique={onCritique}
+            onDelete={onDeleteNote}
+            onUpdate={onUpdateNote}
+            onRemoveCritique={onRemoveCritique}
+            onJump={onJump}
+          />
+        </div>
+      )}
+
       {badges.map((b) => (
         <span
           key={b.id}

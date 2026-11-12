@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { Anchor, Note, NoteCategory } from '../types'
 import { renderMarkdown } from '../lib/markdown'
 import { formatDate } from '../lib/util'
@@ -163,10 +163,9 @@ export function NoteCard({
   )
 }
 
-interface MarginNotesProps {
-  containerRef: React.RefObject<HTMLDivElement | null>
-  anchors: Anchor[]
+interface BlockMarginProps {
   notes: Note[]
+  anchors: Anchor[]
   categories: NoteCategory[]
   stance: 'socratic' | 'corrective'
   busyNoteId?: string | null
@@ -177,100 +176,32 @@ interface MarginNotesProps {
   onJump: (anchor: Anchor) => void
 }
 
-/** 页边批注：按块在正文里的垂直位置摆放，模拟写在书页边缘的感觉 */
-export function MarginNotes({
-  containerRef, anchors, notes, categories, stance, busyNoteId, onCritique, onDelete, onUpdate, onRemoveCritique, onJump,
-}: MarginNotesProps) {
-  const [tops, setTops] = useState<Record<string, number>>({})
-  const [stacked, setStacked] = useState<{ note: Note; anchor: Anchor; top: number }[]>([])
-  const rafRef = useRef(0)
-
-  // 用屏幕上的真实位置来定位：offsetTop 相对的是 padding box，正文容器有 46px 上内边距，
-  // 直接用会让页边批注整体比划线高出一段；getBoundingClientRect 才是和划线共同的坐标系。
-  useLayoutEffect(() => {
-    const root = containerRef.current
-    if (!root) return
-    const measure = () => {
-      const next: Record<string, number> = {}
-      const rootRect = root.getBoundingClientRect()
-      // 缩放比例从实际宽度反推：不同浏览器对 zoom 的 computed value 表示并不一致
-      const zoom = rootRect.width && root.offsetWidth ? rootRect.width / root.offsetWidth : 1
-      for (const n of notes) {
-        if (next[n.anchorId] !== undefined) continue
-        const anchor = anchors.find((a) => a.id === n.anchorId)
-        if (!anchor) continue
-        const el = root.querySelector<HTMLElement>(`[data-block-id="${cssEscape(anchor.blockId)}"]`)
-        if (!el) continue
-        next[anchor.id] = Math.max(0, (el.getBoundingClientRect().top - rootRect.top) / zoom)
-      }
-      setTops(next)
-    }
-    measure()
-    rafRef.current = window.requestAnimationFrame(() => {
-      measure()
-      rafRef.current = window.requestAnimationFrame(measure)
-    })
-    const ro = new ResizeObserver(measure)
-    ro.observe(root)
-    root.querySelectorAll<HTMLElement>('.blk').forEach((el) => ro.observe(el))
-    const scroller = root.closest('.reader-scroll')
-    scroller?.addEventListener('scroll', measure, { passive: true })
-    window.addEventListener('resize', measure)
-    document.fonts?.ready.then(measure).catch(() => undefined)
-    const timer = window.setTimeout(measure, 260)
-    return () => {
-      window.cancelAnimationFrame(rafRef.current)
-      window.clearTimeout(timer)
-      ro.disconnect()
-      scroller?.removeEventListener('scroll', measure)
-      window.removeEventListener('resize', measure)
-    }
-  }, [containerRef, anchors, notes])
-
-  useEffect(() => {
-    const rows: { note: Note; anchor: Anchor; top: number }[] = []
-    for (const note of notes) {
-      const anchor = anchors.find((a) => a.id === note.anchorId)
-      if (!anchor) continue
-      const base = tops[anchor.id]
-      if (base === undefined) continue
-      rows.push({ note, anchor, top: base })
-    }
-    rows.sort((a, b) => a.top - b.top)
-    let lastBottom = -Infinity
-    const placed = rows.map((row) => {
-      const top = Math.max(row.top, lastBottom + 10)
-      lastBottom = top + 96
-      return { ...row, top }
-    })
-    setStacked(placed)
-  }, [tops, anchors, notes])
-
-  if (!stacked.length) return null
-
+/**
+ * 页边批注：卡片直接挂在它所属那一段的行容器里，绝对定位到右侧页边。
+ * 位置完全由布局决定，不再用 JS 量任何坐标 —— 滚动、缩放、重新打开文档都不会错位或消失。
+ */
+export function BlockMargin({
+  notes, anchors, categories, stance, busyNoteId, onCritique, onDelete, onUpdate, onRemoveCritique, onJump,
+}: BlockMarginProps) {
+  if (!notes.length) return null
   return (
-    <aside className="margin-notes" aria-label="页边批注">
-      {stacked.map(({ note, anchor, top }) => (
-        <div key={note.id} className="margin-slot" style={{ top }}>
-          <NoteCard
-            note={note}
-            anchor={anchor}
-            categories={categories}
-            compact
-            stance={stance}
-            busy={busyNoteId === note.id}
-            onCritique={onCritique}
-            onDelete={onDelete}
-            onUpdate={onUpdate}
-            onRemoveCritique={onRemoveCritique}
-            onJump={onJump}
-          />
-        </div>
+    <aside className="blk-margin" aria-label="页边批注">
+      {notes.map((note) => (
+        <NoteCard
+          key={note.id}
+          note={note}
+          anchor={anchors.find((a) => a.id === note.anchorId)}
+          categories={categories}
+          compact
+          stance={stance}
+          busy={busyNoteId === note.id}
+          onCritique={onCritique}
+          onDelete={onDelete}
+          onUpdate={onUpdate}
+          onRemoveCritique={onRemoveCritique}
+          onJump={onJump}
+        />
       ))}
     </aside>
   )
-}
-
-function cssEscape(value: string): string {
-  return value.replace(/["\\]/g, '\\$&')
 }

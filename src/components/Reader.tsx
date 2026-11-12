@@ -59,6 +59,32 @@ export function Reader() {
   const [mapping, setMapping] = useState(false)
   const [panelOpen, setPanelOpen] = useState(true)
   const [hit, setHit] = useState<{ anchor: Anchor; x: number; y: number } | null>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  /** 拖动分隔条调整右侧栏宽度：拖动过程只改 CSS 变量，松手才写库 */
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const body = bodyRef.current
+    if (!body) return
+    const startX = e.clientX
+    const startW = settings.sideWidth || 340
+    const min = 220
+    const max = Math.max(300, Math.min(760, window.innerWidth - 380))
+    let next = startW
+    const move = (ev: PointerEvent) => {
+      next = Math.round(Math.max(min, Math.min(max, startW - (ev.clientX - startX))))
+      body.style.setProperty('--side-w', `${next}px`)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.classList.remove('panel-resizing')
+      if (next !== startW) void patchSettings({ sideWidth: next })
+    }
+    document.body.classList.add('panel-resizing')
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
 
   /* ------- 选区捕获 ------- */
   useEffect(() => {
@@ -473,7 +499,11 @@ export function Reader() {
         </div>
       </header>
 
-      <div className={`reader-body ${panelOpen ? '' : 'no-panel'}`}>
+      <div
+        ref={bodyRef}
+        className={`reader-body ${panelOpen ? '' : 'no-panel'}`}
+        style={{ '--side-w': `${settings.sideWidth || 340}px` } as CSSProperties}
+      >
         <div className="reader-scroll" ref={articleRef} style={{ '--reader-zoom': settings.zoom } as CSSProperties}>
           {doc.kind === 'pdf' ? (
             <PdfArticle doc={doc} anchors={anchors} onVisibleBlock={onPdfPageVisible} />
@@ -494,6 +524,16 @@ export function Reader() {
             />
           )}
         </div>
+
+        {panelOpen && (
+          <div
+            className="panel-resizer no-capture"
+            role="separator"
+            aria-orientation="vertical"
+            title="拖动调整侧栏宽度"
+            onPointerDown={startResize}
+          />
+        )}
 
         {panelOpen && (
           <SidePanel

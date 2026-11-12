@@ -660,11 +660,55 @@ code {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) var(--side-w, 340px);
+  position: relative;
 }
 
 .reader-body.no-panel {
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* 侧栏和正文之间的拖动条：拖动时只改 --side-w，不重排正文 */
+.panel-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: var(--side-w, 340px);
+  width: 9px;
+  transform: translateX(4px);
+  cursor: col-resize;
+  z-index: 7;
+  touch-action: none;
+}
+
+.panel-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--line);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.panel-resizer:hover::after,
+.panel-resizer:active::after {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+body.panel-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.panel-resizing .panel-resizer::after {
+  background: var(--accent);
+}
+
+.reader-body.no-panel .panel-resizer {
+  display: none;
 }
 
 .reader-scroll {
@@ -687,6 +731,30 @@ code {
   font-family: var(--font-read);
   line-height: 1.95;
   letter-spacing: 0.012em;
+  --margin-w: 286px;
+  --margin-gap: 28px;
+}
+
+/* 每一段是一行；页边卡片挂在这一行里，位置由布局保证 */
+.blk-row {
+  position: relative;
+}
+
+.blk-margin {
+  position: absolute;
+  top: -6px;
+  right: calc(-1 * (var(--margin-w) + var(--margin-gap)));
+  width: var(--margin-w);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.blk-margin .note-card {
+  background: var(--paper-soft);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .blk {
@@ -1903,6 +1971,8 @@ code {
 @media (max-width: 1240px) {
   .article-body {
     padding: 36px 290px 30px 36px;
+    --margin-w: 250px;
+    --margin-gap: 24px;
   }
 
   .margin-notes,
@@ -1917,12 +1987,13 @@ code {
     max-width: 760px;
   }
 
-  .margin-notes {
+  .margin-notes,
+  .blk-margin {
     display: none;
   }
 
   .reader-body {
-    grid-template-columns: minmax(0, 1fr) 300px;
+    --side-w: 300px;
   }
 
   .hero {
@@ -1940,6 +2011,10 @@ code {
 @media (max-width: 820px) {
   .reader-body {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-resizer {
+    display: none;
   }
 
   .side-panel {

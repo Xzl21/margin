@@ -198,6 +198,8 @@ export interface Settings {
   fontSize: number
   /** 正文缩放，1 = 原始大小，仅影响阅读区域。 */
   zoom: number
+  /** 右侧栏宽度（px），可拖动调整 */
+  sideWidth: number
   theme: 'paper' | 'plain' | 'dark'
   proxyBase: string
   /** 批注类别（可增删改）；颜色用于页边卡片与正文高亮 */

@@ -62,6 +62,7 @@ export function defaultSettings(): Settings {
     noSpoiler: true,
     fontSize: 18,
     zoom: 1,
+    sideWidth: 340,
     theme: 'paper',
     proxyBase: '/api/proxy',
     noteCategories: DEFAULT_NOTE_CATEGORIES.map((c) => ({ ...c })),
