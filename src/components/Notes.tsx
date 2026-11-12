@@ -177,15 +177,14 @@ interface BlockMarginProps {
 }
 
 /**
- * 页边批注：卡片直接挂在它所属那一段的行容器里，绝对定位到右侧页边。
- * 位置完全由布局决定，不再用 JS 量任何坐标 —— 滚动、缩放、重新打开文档都不会错位或消失。
+ * 右侧栏里的一组批注卡片：一个正文段落对应一组，位置由上层的 rail 布局决定。
  */
 export function BlockMargin({
   notes, anchors, categories, stance, busyNoteId, onCritique, onDelete, onUpdate, onRemoveCritique, onJump,
 }: BlockMarginProps) {
   if (!notes.length) return null
   return (
-    <aside className="blk-margin" aria-label="页边批注">
+    <div className="rail-cards">
       {notes.map((note) => (
         <NoteCard
           key={note.id}
@@ -202,6 +201,6 @@ export function BlockMargin({
           onJump={onJump}
         />
       ))}
-    </aside>
+    </div>
   )
 }

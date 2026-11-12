@@ -57,7 +57,7 @@ export function Reader() {
   const [hit, setHit] = useState<{ anchor: Anchor; x: number; y: number } | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
 
-  /** 拖动分隔条调整右侧栏宽度：拖动过程只改 CSS 变量，松手才写库 */
+  /** 拖动分隔条调整左侧栏宽度：左侧栏在左边，往右拖变宽。拖动时只改 CSS 变量，松手才写库 */
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault()
     const body = bodyRef.current
@@ -68,7 +68,7 @@ export function Reader() {
     const max = Math.max(300, Math.min(760, window.innerWidth - 380))
     let next = startW
     const move = (ev: PointerEvent) => {
-      next = Math.round(Math.max(min, Math.min(max, startW - (ev.clientX - startX))))
+      next = Math.round(Math.max(min, Math.min(max, startW + (ev.clientX - startX))))
       body.style.setProperty('--side-w', `${next}px`)
     }
     const up = () => {
@@ -510,36 +510,6 @@ export function Reader() {
         className={`reader-body ${panelOpen ? '' : 'no-panel'}`}
         style={{ '--side-w': `${settings.sideWidth || 340}px` } as CSSProperties}
       >
-        <div className="reader-scroll" ref={articleRef} style={{ '--reader-zoom': settings.zoom } as CSSProperties}>
-          {doc.kind === 'pdf' ? (
-            <PdfArticle doc={doc} anchors={anchors} onVisibleBlock={onPdfPageVisible} />
-          ) : (
-            <HtmlArticle
-              doc={doc}
-              blocks={blocks}
-              anchors={anchors}
-              notes={notes}
-              settings={settings}
-              busyNoteId={busyNoteId}
-              onCritique={handleCritique}
-              onDeleteNote={(n) => void removeNote(n.id)}
-              onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
-              onRemoveCritique={(n) => void removeCritique(n.id)}
-              onJump={jumpAnchor}
-            />
-          )}
-        </div>
-
-        {panelOpen && (
-          <div
-            className="panel-resizer no-capture"
-            role="separator"
-            aria-orientation="vertical"
-            title="拖动调整侧栏宽度"
-            onPointerDown={startResize}
-          />
-        )}
-
         {panelOpen && (
           <SidePanel
             doc={doc}
@@ -562,6 +532,36 @@ export function Reader() {
             busyNoteId={busyNoteId}
           />
         )}
+
+        {panelOpen && (
+          <div
+            className="panel-resizer no-capture"
+            role="separator"
+            aria-orientation="vertical"
+            title="拖动调整侧栏宽度"
+            onPointerDown={startResize}
+          />
+        )}
+
+        <div className="reader-scroll" ref={articleRef} style={{ '--reader-zoom': settings.zoom } as CSSProperties}>
+          {doc.kind === 'pdf' ? (
+            <PdfArticle doc={doc} anchors={anchors} onVisibleBlock={onPdfPageVisible} />
+          ) : (
+            <HtmlArticle
+              doc={doc}
+              blocks={blocks}
+              anchors={anchors}
+              notes={notes}
+              settings={settings}
+              busyNoteId={busyNoteId}
+              onCritique={handleCritique}
+              onDeleteNote={(n) => void removeNote(n.id)}
+              onUpdateNote={(n, body, kind) => void updateNote(n.id, body, kind)}
+              onRemoveCritique={(n) => void removeCritique(n.id)}
+              onJump={jumpAnchor}
+            />
+          )}
+        </div>
       </div>
 
       {captured && (

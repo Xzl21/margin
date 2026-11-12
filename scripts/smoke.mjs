@@ -129,6 +129,13 @@ try {
     const rows = doc.querySelectorAll('.blk-row').length
     check('blocks wrapped in rows', rows >= blocks, `rows=${rows} blocks=${blocks}`)
     check('panel resizer present', Boolean(doc.querySelector('.panel-resizer')))
+    check('article main column', Boolean(doc.querySelector('.article-main')))
+    check('right rail present', Boolean(doc.querySelector('.article-rail')))
+    const body = doc.querySelector('.reader-body')
+    const order = body ? [...body.children].map((el) => el.className) : []
+    const panelAt = order.findIndex((c) => /side-panel/.test(c))
+    const scrollAt = order.findIndex((c) => /reader-scroll/.test(c))
+    check('side panel on the left', panelAt >= 0 && scrollAt > panelAt, order.join(' | ').slice(0, 80))
     check('outline rendered', doc.querySelectorAll('.outline-item, .outline li, .panel-outline li, .toc-item').length > 0)
     const head = doc.querySelector('.reader-head')
     check('reader header present', Boolean(head), (head?.textContent ?? '').replace(/\s+/g, ' ').slice(0, 80))

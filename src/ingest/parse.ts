@@ -5,6 +5,7 @@ import MarkdownIt from 'markdown-it'
 import type { Block, DocKind, OutlineNode } from '../types'
 import { blocksToOutline, htmlToBlocks, inferPdfOutline } from './html'
 import { readEpub } from './epub'
+import { docxWithMath, replaceMathTokens } from './docx'
 import { countWords, sha256Hex } from '../lib/util'
 import { escapeHtml } from '../lib/markdown'
 
@@ -73,8 +74,11 @@ export async function parseFile(file: File): Promise<ParsedDoc> {
     html = book.html
     bookTitle = book.title
   } else if (kind === 'docx') {
-    const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
-    html = result.value
+    // Word 的公式（OMML）mammoth 不认识，会整段丢掉。先换成 MathML 占位符，
+    // 让 mammoth 正常转段落，转完再把占位符替换回 MathML。
+    const prepared = await docxWithMath(buffer)
+    const result = await mammoth.convertToHtml({ arrayBuffer: prepared.data })
+    html = replaceMathTokens(result.value, prepared.math)
   } else if (kind === 'md') {
     html = md.render(new TextDecoder().decode(buffer))
   } else {

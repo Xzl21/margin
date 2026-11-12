@@ -4,78 +4,9 @@
  * 因为阅读器只需要正文与标题，不需要图片、字体和 DRM。
  */
 
-type ZipEntry = {
-  name: string
-  method: number
-  compSize: number
-  size: number
-  offset: number
-}
+import { decodeZipText, readZipEntries, readZipEntry } from './zip'
 
-const EOCD_SIG = 0x06054b50
-const CENTRAL_SIG = 0x02014b50
-const LOCAL_SIG = 0x04034b50
-
-function u16(dv: DataView, off: number) {
-  return dv.getUint16(off, true)
-}
-
-function u32(dv: DataView, off: number) {
-  return dv.getUint32(off, true)
-}
-
-function findEocd(dv: DataView): number {
-  const min = Math.max(0, dv.byteLength - 0xffff - 22)
-  for (let i = dv.byteLength - 22; i >= min; i--) {
-    if (u32(dv, i) === EOCD_SIG) return i
-  }
-  throw new Error('不是有效的 EPUB：找不到 zip 目录')
-}
-
-function readEntries(bytes: Uint8Array): Map<string, ZipEntry> {
-  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  const eocd = findEocd(dv)
-  const count = u16(dv, eocd + 10)
-  let off = u32(dv, eocd + 16)
-  const out = new Map<string, ZipEntry>()
-  const decoder = new TextDecoder('utf-8')
-
-  for (let i = 0; i < count; i++) {
-    if (u32(dv, off) !== CENTRAL_SIG) break
-    const method = u16(dv, off + 10)
-    const compSize = u32(dv, off + 20)
-    const size = u32(dv, off + 24)
-    const nameLen = u16(dv, off + 28)
-    const extraLen = u16(dv, off + 30)
-    const commentLen = u16(dv, off + 32)
-    const localOff = u32(dv, off + 42)
-    const name = decoder.decode(bytes.subarray(off + 46, off + 46 + nameLen))
-    if (compSize !== 0xffffffff && localOff !== 0xffffffff) {
-      out.set(name, { name, method, compSize, size, offset: localOff })
-    }
-    off += 46 + nameLen + extraLen + commentLen
-  }
-  return out
-}
-
-async function readEntry(bytes: Uint8Array, entry: ZipEntry): Promise<Uint8Array> {
-  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  if (u32(dv, entry.offset) !== LOCAL_SIG) throw new Error(`EPUB 条目损坏：${entry.name}`)
-  const nameLen = u16(dv, entry.offset + 26)
-  const extraLen = u16(dv, entry.offset + 28)
-  const start = entry.offset + 30 + nameLen + extraLen
-  const raw = bytes.subarray(start, start + entry.compSize)
-  if (entry.method === 0) return raw
-  if (entry.method !== 8) throw new Error(`不支持的压缩方式（${entry.method}）：${entry.name}`)
-  const stream = new Blob([raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer])
-    .stream()
-    .pipeThrough(new DecompressionStream('deflate-raw'))
-  return new Uint8Array(await new Response(stream).arrayBuffer())
-}
-
-function decode(bytes: Uint8Array): string {
-  return new TextDecoder('utf-8').decode(bytes)
-}
+const decode = decodeZipText
 
 /** 把 OPF 里的相对路径解析成 zip 内绝对路径 */
 function resolvePath(base: string, href: string): string {
@@ -117,11 +48,11 @@ function bodyHtml(xhtml: string): string {
 export type EpubContent = { title: string; html: string }
 
 export async function readEpub(bytes: Uint8Array, fallbackTitle: string): Promise<EpubContent> {
-  const entries = readEntries(bytes)
+  const entries = readZipEntries(bytes)
 
   const containerEntry = entries.get('META-INF/container.xml')
   if (!containerEntry) throw new Error('不是有效的 EPUB：缺少 META-INF/container.xml')
-  const containerText = decode(await readEntry(bytes, containerEntry))
+  const containerText = decode(await readZipEntry(bytes, containerEntry))
   const container = new DOMParser().parseFromString(containerText, 'application/xml')
   const rootfile =
     container.getElementsByTagName('rootfile')[0]?.getAttribute('full-path') ||
@@ -130,7 +61,7 @@ export async function readEpub(bytes: Uint8Array, fallbackTitle: string): Promis
   const opfPath = resolvePath('', rootfile)
   const opfEntry = entries.get(opfPath)
   if (!opfEntry) throw new Error('EPUB 的 OPF 清单缺失')
-  const opfText = decode(await readEntry(bytes, opfEntry))
+  const opfText = decode(await readZipEntry(bytes, opfEntry))
   const opf = new DOMParser().parseFromString(opfText, 'application/xml')
   const opfDir = dirOf(opfPath)
 
@@ -185,7 +116,7 @@ export async function readEpub(bytes: Uint8Array, fallbackTitle: string): Promis
     if (!/xhtml|html/.test(item.type) && !/\.x?html?$/i.test(item.href)) continue
     const entry = entries.get(item.href) ?? entries.get(encodeURI(item.href)) ?? entries.get(decodeURIComponent(item.href))
     if (!entry) continue
-    const html = bodyHtml(decode(await readEntry(bytes, entry)))
+    const html = bodyHtml(decode(await readZipEntry(bytes, entry)))
     if (html.trim()) chunks.push(html)
   }
 
