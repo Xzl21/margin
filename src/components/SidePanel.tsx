@@ -19,6 +19,7 @@ interface Props {
   onCritique: (note: Note) => void
   onDeleteNote: (note: Note) => void
   onToggleStuck: (stuck: Stuck) => void
+  onDeleteStuck: (stuck: Stuck) => void
   onClose: () => void
   mapping: boolean
   busyNoteId: string | null
@@ -34,7 +35,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function SidePanel({
   doc, blocks, anchors, notes, stucks, settings, tab, onTab, onJumpBlock, onJumpAnchor,
-  onGenerateMap, onCritique, onDeleteNote, onToggleStuck, onClose, mapping, busyNoteId,
+  onGenerateMap, onCritique, onDeleteNote, onToggleStuck, onDeleteStuck, onClose, mapping, busyNoteId,
 }: Props) {
   const openStucks = stucks.filter((s) => !s.resolved)
   const outline = doc.outline
@@ -137,6 +138,14 @@ export function SidePanel({
                     )}
                     <button type="button" className="mini accent" onClick={() => onToggleStuck(stuck)}>
                       {stuck.resolved ? '标为未解决' : '标记已解决'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mini danger"
+                      title="删除这个卡点"
+                      onClick={() => onDeleteStuck(stuck)}
+                    >
+                      删除
                     </button>
                   </div>
                 </div>

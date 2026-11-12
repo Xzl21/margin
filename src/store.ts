@@ -42,6 +42,7 @@ interface AppStore {
 
   addStuck: (anchorId: string, question: string) => Promise<void>
   setStuckResolved: (id: string, resolved: boolean) => Promise<void>
+  removeStuck: (id: string) => Promise<void>
 
   setMap: (map: DepMap) => Promise<void>
   advanceFrontier: (idx: number) => void
@@ -343,6 +344,23 @@ export const useApp = create<AppStore>()((set, get) => ({
     const updated = { ...s, resolved }
     await db.stucks.put(updated)
     set({ stucks: get().stucks.map((x) => (x.id === id ? updated : x)) })
+  },
+
+  async removeStuck(id) {
+    const stuck = get().stucks.find((s) => s.id === id)
+    await db.stucks.delete(id)
+    const stucks = get().stucks.filter((s) => s.id !== id)
+    if (stuck) {
+      const used =
+        get().notes.some((n) => n.anchorId === stuck.anchorId) ||
+        stucks.some((s) => s.anchorId === stuck.anchorId)
+      if (!used) {
+        await db.anchors.delete(stuck.anchorId)
+        set({ stucks, anchors: get().anchors.filter((a) => a.id !== stuck.anchorId) })
+        return
+      }
+    }
+    set({ stucks })
   },
 
   async setMap(map) {

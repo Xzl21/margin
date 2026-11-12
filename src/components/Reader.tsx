@@ -25,6 +25,7 @@ export function Reader() {
   const saveCritique = useApp((s) => s.saveCritique)
   const addStuck = useApp((s) => s.addStuck)
   const setStuckResolved = useApp((s) => s.setStuckResolved)
+  const removeStuck = useApp((s) => s.removeStuck)
   const setMap = useApp((s) => s.setMap)
   const advanceFrontier = useApp((s) => s.advanceFrontier)
   const setError = useApp((s) => s.setError)
@@ -375,6 +376,9 @@ export function Reader() {
             onCritique={handleCritique}
             onDeleteNote={(n) => void removeNote(n.id)}
             onToggleStuck={(s) => void setStuckResolved(s.id, !s.resolved)}
+            onDeleteStuck={(s) => {
+              if (window.confirm('删除这个卡点？原文和批注不会受影响。')) void removeStuck(s.id)
+            }}
             onClose={() => setPanelOpen(false)}
             mapping={mapping}
             busyNoteId={busyNoteId}
