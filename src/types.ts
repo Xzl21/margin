@@ -258,9 +258,12 @@ export interface Settings {
 export interface Captured {
   blockId: string
   blockIdx: number
+  /** 锚点用：落在这一个块里的引文（过长会截断） */
   quote: string
   prefix: string
   suffix: string
+  /** 选区原文（可跨段，给模型读；不等同于锚点引文） */
+  excerpt?: string
   page?: number
   rects?: NormRect[]
 }

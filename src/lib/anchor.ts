@@ -46,6 +46,7 @@ export function captureHtmlSelection(root: HTMLElement): Captured | null {
   if (!blockEl) return null
   const raw = sel.toString()
   if (!raw.trim()) return null
+  const excerpt = normalizeSpace(raw).slice(0, 3000)
   const blockText = blockEl.textContent ?? ''
   const start = Math.min(offsetIn(blockEl, range.startContainer, range.startOffset), blockText.length)
   const endRaw = blockEl.contains(range.endContainer)
@@ -58,6 +59,7 @@ export function captureHtmlSelection(root: HTMLElement): Captured | null {
     blockId: blockEl.dataset.blockId ?? '',
     blockIdx: Number(blockEl.dataset.idx ?? '0'),
     quote: exact,
+    excerpt,
     prefix: normalizeSpace(blockText.slice(Math.max(0, start - 40), start)),
     suffix: normalizeSpace(blockText.slice(end, end + 40)),
   }
@@ -80,7 +82,8 @@ export function capturePdfSelection(root: HTMLElement, blocks: Block[]): Capture
   if (!root.contains(range.commonAncestorContainer)) return null
   const pageEl = closestPage(range.commonAncestorContainer)
   if (!pageEl) return null
-  const quote = normalizeSpace(sel.toString()).slice(0, MAX_QUOTE)
+  const full = normalizeSpace(sel.toString())
+  const quote = full.slice(0, MAX_QUOTE)
   if (!quote) return null
 
   const box = pageEl.getBoundingClientRect()
@@ -121,6 +124,7 @@ export function capturePdfSelection(root: HTMLElement, blocks: Block[]): Capture
     blockId: best.id,
     blockIdx: best.idx,
     quote: exact,
+    excerpt: full.slice(0, 3000),
     prefix: normalizeSpace(best.text.slice(Math.max(0, idx - 40), idx)),
     suffix: normalizeSpace(best.text.slice(idx + exact.length, idx + exact.length + 40)),
     page,

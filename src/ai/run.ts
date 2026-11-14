@@ -24,6 +24,15 @@ export type Task = 'explain' | 'concept' | 'ask' | 'verify' | 'critique' | 'map'
 /** 真正对应设置里 routing 行的任务（概念复用解释的路由） */
 export type RoutedTask = 'explain' | 'ask' | 'verify' | 'critique' | 'map'
 
+/**
+ * 锚点引文可能被截断（单块 800 字），也可能只覆盖第一段；
+ * 发给模型时优先用完整选区，避免「选中两段却只问了第一段」。
+ */
+function quoteForModel(captured: Captured): string {
+  const excerpt = captured.excerpt?.trim()
+  return excerpt && excerpt.length > 12 ? excerpt : captured.quote
+}
+
 function routeFor(settings: Settings, task: RoutedTask) {
   if (!routeReady(settings, task)) {
     throw new Error('还没有可用的模型。打开「设置 → 模型」，选一个厂商并填入 API Key（Ollama 本地模型不用填）。')
@@ -88,7 +97,7 @@ export async function runExplain(
   const messages = explainMessages({
     docTitle: input.doc.title,
     ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
-    quote: input.captured.quote,
+    quote: quoteForModel(input.captured),
     question: input.question,
   })
   return streamTask(
@@ -109,7 +118,7 @@ export async function runConcept(
   const messages = conceptMessages({
     docTitle: input.doc.title,
     ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
-    quote: input.captured.quote,
+    quote: quoteForModel(input.captured),
   })
   return streamTask(
     { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2, thinking: thinkingFor(input.settings, 'concept') },
@@ -136,7 +145,7 @@ export async function runCritique(
     docTitle: input.doc.title,
     ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
     note: input.note,
-    quote: input.captured.quote,
+    quote: quoteForModel(input.captured),
     previous: input.previous,
     stance: input.settings.stance,
   })
@@ -172,7 +181,7 @@ export async function runVerify(
       {
         provider,
         model,
-        messages: verifyNativeMessages({ docTitle: input.doc.title, quote: input.captured.quote, ctx }),
+        messages: verifyNativeMessages({ docTitle: input.doc.title, quote: quoteForModel(input.captured), ctx }),
         proxyBase: input.settings.proxyBase,
         signal,
         thinking: thinkingFor(input.settings, 'verify'),
@@ -202,7 +211,7 @@ export async function runVerify(
   const online = searchReady(input.settings)
   let hits: SearchHit[] = []
   if (online) {
-    hits = await searchWeb(input.settings, input.captured.quote, signal)
+    hits = await searchWeb(input.settings, quoteForModel(input.captured), signal)
   }
 
   const pages: { url: string; text: string }[] = []
@@ -219,7 +228,7 @@ export async function runVerify(
 
   const messages = verifyMessages({
     docTitle: input.doc.title,
-    quote: input.captured.quote,
+    quote: quoteForModel(input.captured),
     ctx,
     hits,
     pages,
@@ -271,7 +280,7 @@ export async function runAsk(
   const online = searchReady(input.settings)
   let hits: SearchHit[] = []
   if (online) {
-    const query = `${input.question} ${input.captured.quote}`.trim().slice(0, 120)
+    const query = `${input.question} ${quoteForModel(input.captured)}`.trim().slice(0, 120)
     hits = await searchWeb(input.settings, query, signal)
   }
   const pages: { url: string; text: string }[] = []
@@ -288,7 +297,7 @@ export async function runAsk(
   const messages = askMessages({
     docTitle: input.doc.title,
     ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
-    quote: input.captured.quote,
+    quote: quoteForModel(input.captured),
     history: input.history,
     question: input.question,
     hits,
