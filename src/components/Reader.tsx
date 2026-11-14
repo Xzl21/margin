@@ -540,40 +540,45 @@ export function Reader() {
           </span>
         </div>
         <div className="reader-tools">
-          <button
-            type="button"
-            className={panelOpen ? 'ghost active' : 'ghost'}
-            onClick={() => void patchSettings({ panelOpen: !panelOpen })}
-            title="显示或收起左侧栏（大纲、批注列表、查证、路线）"
-          >
-            侧栏
-          </button>
-          <button
-            type="button"
-            className={settings.railOpen !== false ? 'ghost active' : 'ghost'}
-            onClick={() => void patchSettings({ railOpen: settings.railOpen === false })}
-            title="显示或收起右侧批注栏（贴着正文划线）"
-          >
-            页边
-          </button>
-          <button
-            type="button"
-            className="ghost icon-only"
-            title="放大文档页面"
-            disabled={settings.zoom >= 1.8}
-            onClick={() => void patchSettings({ zoom: Math.round((settings.zoom + 0.1) * 10) / 10 })}
-          >
-            <ZoomIcon />
-          </button>
-          <button
-            type="button"
-            className="ghost icon-only"
-            title="缩小文档页面"
-            disabled={settings.zoom <= 0.7}
-            onClick={() => void patchSettings({ zoom: Math.round((settings.zoom - 0.1) * 10) / 10 })}
-          >
-            <ZoomIcon minus />
-          </button>
+          <div className="tool-seg" role="group" aria-label="侧栏开关">
+            <button
+              type="button"
+              className={panelOpen ? 'seg active' : 'seg'}
+              onClick={() => void patchSettings({ panelOpen: !panelOpen })}
+              title="显示或收起左侧栏（大纲、批注列表、查证、路线）"
+            >
+              侧栏
+            </button>
+            <button
+              type="button"
+              className={settings.railOpen !== false ? 'seg active' : 'seg'}
+              onClick={() => void patchSettings({ railOpen: settings.railOpen === false })}
+              title="显示或收起右侧批注栏（贴着正文划线）"
+            >
+              页边
+            </button>
+          </div>
+          <div className="tool-seg zoom" role="group" aria-label="页面缩放">
+            <button
+              type="button"
+              className="ghost icon-only seg"
+              title="缩小文档页面"
+              disabled={settings.zoom <= 0.7}
+              onClick={() => void patchSettings({ zoom: Math.round((settings.zoom - 0.1) * 10) / 10 })}
+            >
+              <ZoomIcon minus />
+            </button>
+            <span className="zoom-value">{Math.round(settings.zoom * 100)}%</span>
+            <button
+              type="button"
+              className="ghost icon-only seg"
+              title="放大文档页面"
+              disabled={settings.zoom >= 1.8}
+              onClick={() => void patchSettings({ zoom: Math.round((settings.zoom + 0.1) * 10) / 10 })}
+            >
+              <ZoomIcon />
+            </button>
+          </div>
           <button type="button" className="ghost" onClick={openSettings}>
             设置
           </button>

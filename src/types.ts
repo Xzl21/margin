@@ -198,7 +198,7 @@ export interface ProviderConfig {
   proxy: boolean
 }
 
-export type SearchKind = 'deepseek' | 'tavily' | 'brave' | 'serper' | 'searxng'
+export type SearchKind = 'deepseek'
 
 /** 联网检索服务（给「查证」用）。密钥同样只存在本地。 */
 export interface SearchProvider {
@@ -206,7 +206,7 @@ export interface SearchProvider {
   name: string
   kind: SearchKind
   apiKey: string
-  /** 仅 searxng 需要：实例地址，例如 https://searx.be */
+  /** 服务地址，留空就用官方地址（自建中转或代理时填） */
   endpoint?: string
   proxy: boolean
 }

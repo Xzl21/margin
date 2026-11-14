@@ -805,7 +805,83 @@ code {
 
 .reader-tools {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 分段按钮：侧栏 / 页边 与 缩放放成两组，边界由容器画，按钮不再各自描边 */
+.tool-seg {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  border-radius: 999px;
+  background: var(--paper-soft, transparent);
+  overflow: hidden;
+}
+
+.tool-seg .seg {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.tool-seg .seg + .seg {
+  border-left: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+}
+
+.tool-seg .seg:hover {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+
+.tool-seg .seg.active {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.tool-seg.zoom .seg {
+  padding: 5px 8px;
+}
+
+.zoom-value {
+  min-width: 44px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  border-left: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  padding: 0 2px;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-seg.zoom .seg:last-child {
+  border-left: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+}
+
+.provider-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.search-steps {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.9;
+}
+
+.search-steps li::marker {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .head-progress {
@@ -2259,9 +2335,12 @@ body.panel-resizing .panel-resizer::after {
     z-index: 30;
   }
 
-  .reader-tools .ghost:nth-child(2),
-  .reader-tools .ghost:nth-child(3) {
+  .reader-tools .tool-seg.zoom {
     display: none;
+  }
+
+  .reader-tools .tool-seg:first-child .seg {
+    padding: 5px 9px;
   }
 
   .lib-head {

@@ -136,22 +136,6 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  if (req.method === 'GET' && req.url.startsWith('/res/v1/web/search')) {
-    json(res, 200, {
-      web: {
-        results: SEARCH_RESULTS.map((r) => ({ title: r.title, url: r.url, description: r.content })),
-      },
-    })
-    return
-  }
-
-  if (req.method === 'POST' && req.url === '/search-serper') {
-    json(res, 200, {
-      organic: SEARCH_RESULTS.map((r) => ({ title: r.title, link: r.url, snippet: r.content })),
-    })
-    return
-  }
-
   if (req.url !== '/v1/chat/completions' || req.method !== 'POST') {
     res.writeHead(404, { 'content-type': 'application/json' }).end('{"error":"not found"}')
     return

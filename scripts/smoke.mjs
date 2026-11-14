@@ -166,8 +166,8 @@ check('ask tab before mark', tabs.findIndex((t) => /^提问/.test(t)) < tabs.fin
       searchTab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
       await wait(200)
       const text = doc.body.textContent ?? ''
-      check('search settings render', /Tavily/.test(text) && /查证/.test(text), text.replace(/\s+/g, ' ').slice(0, 60))
-      check('search provider cards', doc.querySelectorAll('.provider-card').length >= 4)
+      check('search settings render', /DeepSeek 搜索/.test(text) && /查证/.test(text), text.replace(/\s+/g, ' ').slice(0, 60))
+      check('search provider cards', doc.querySelectorAll('.provider-card').length === 1)
       check('deepseek search source present', /DeepSeek 搜索/.test(text))
     }
 

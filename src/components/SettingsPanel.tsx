@@ -6,9 +6,9 @@ import { searchWeb } from '../ai/search'
 import { docMarkdown, download, exportBundle, importBundle } from '../lib/backup'
 import { uuid } from '../lib/util'
 import type {
-  HighlightKey, NoteCategory, ProviderConfig, SearchKind, SearchProvider, Settings, ThinkingMode, ThinkingTask,
+  HighlightKey, NoteCategory, ProviderConfig, SearchProvider, Settings, ThinkingMode, ThinkingTask,
 } from '../types'
-import { HIGHLIGHT_LABELS } from '../ai/presets'
+import { deepseekKey, HIGHLIGHT_LABELS } from '../ai/presets'
 import { clearUsage, estimateCost, formatCost, loadUsage, TASK_NAME, type UsageSummary } from '../ai/usage'
 
 type Tab = 'models' | 'colors' | 'reading' | 'search' | 'usage' | 'data'
@@ -135,6 +135,8 @@ export function SettingsPanel() {
         providers: settings.search.providers.map((p) => (p.id === provider.id ? provider : p)),
       },
     })
+
+  const searchProvider = settings.search.providers[0]
 
   const testSearch = async (provider: SearchProvider) => {
     setTesting(provider.id)
@@ -498,98 +500,58 @@ export function SettingsPanel() {
           {tab === 'search' && (
             <>
               <section>
-                <h3>「查证」用哪个检索服务</h3>
+                <h3>查证走 DeepSeek 官方搜索</h3>
                 <p className="section-hint">
-                  选中一句话点「查证」，它会先用下面的服务去搜索，打开前几条结果的正文，再让模型**只依据这些资料**给出
-                  「支持 / 部分支持 / 与资料矛盾 / 资料不足」的结论，并标出处。检索 Key 也只存在这台电脑的浏览器里。
-                  检索接口基本都不允许浏览器直连，所以默认走本地转发（<code>/api/proxy</code>）。
+                  选中一句话点「查证」：先用 DeepSeek 搜索取回几条结果，再打开前 3 条的正文，最后让模型
+                  **只依据这些资料**判断「支持 / 部分支持 / 与资料矛盾 / 资料不足」，并标 [n] 出处。
+                  搜索、抓取都在官方完成，Key 与模型共用一个。
                 </p>
-                <div className="provider-list">
-                  {settings.search.providers.map((provider) => (
-                    <div
-                      key={provider.id}
-                      className={`provider-card ${settings.search.activeId === provider.id ? 'active' : ''}`}
-                    >
-                      <div className="provider-head">
-                        <label className="toggle">
-                          <input
-                            type="radio"
-                            name="search-active"
-                            checked={settings.search.activeId === provider.id}
-                            onChange={() =>
-                              void patchSettings({ search: { ...settings.search, activeId: provider.id } })
-                            }
-                          />
-                          {provider.name}
-                        </label>
-                        <label className="toggle">
-                          <input
-                            type="checkbox"
-                            checked={provider.proxy}
-                            onChange={(e) => saveSearchProvider({ ...provider, proxy: e.target.checked })}
-                          />
-                          经本地转发
-                        </label>
-                        <button
-                          type="button"
-                          className="mini"
-                          disabled={testing === provider.id}
-                          onClick={() => void testSearch(provider)}
-                        >
-                          {testing === provider.id ? '检索中…' : '测试检索'}
-                        </button>
-                      </div>
-                      <div className="provider-grid">
-                        <label>
-                          <span>服务类型</span>
-                          <select
-                            value={provider.kind}
-                            onChange={(e) =>
-                              saveSearchProvider({ ...provider, kind: e.target.value as SearchKind })
-                            }
-                          >
-                            <option value="deepseek">DeepSeek 搜索（用同一个 Key）</option>
-                            <option value="tavily">Tavily（专为模型设计）</option>
-                            <option value="brave">Brave Search</option>
-                            <option value="serper">Serper（Google 结果）</option>
-                            <option value="searxng">SearXNG（自建，免费）</option>
-                          </select>
-                        </label>
-                        {provider.kind === 'searxng' ? (
-                          <label>
-                            <span>实例地址</span>
-                            <input
-                              value={provider.endpoint ?? ''}
-                              placeholder="https://searx.be"
-                              onChange={(e) => saveSearchProvider({ ...provider, endpoint: e.target.value })}
-                            />
-                          </label>
-                        ) : provider.kind === 'deepseek' ? (
-                          <label>
-                            <span>API Key</span>
-                            <span className="section-hint">复用「模型」页里 DeepSeek 的 Key，这里不用再填。</span>
-                          </label>
-                        ) : (
-                          <label>
-                            <span>API Key</span>
-                            <input
-                              type="password"
-                              value={provider.apiKey}
-                              placeholder="检索服务的 Key"
-                              autoComplete="off"
-                              onChange={(e) => saveSearchProvider({ ...provider, apiKey: e.target.value })}
-                            />
-                          </label>
-                        )}
-                      </div>
-                      {testResult[provider.id] && (
-                        <p className={`test-result ${testResult[provider.id].startsWith('✓') ? 'ok' : 'bad'}`}>
-                          {testResult[provider.id]}
-                        </p>
-                      )}
+                {searchProvider && (
+                  <div className="provider-card active">
+                    <div className="provider-head">
+                      <span className="provider-name">DeepSeek 搜索</span>
+                      <label className="toggle">
+                        <input
+                          type="checkbox"
+                          checked={searchProvider.proxy}
+                          onChange={(e) => saveSearchProvider({ ...searchProvider, proxy: e.target.checked })}
+                        />
+                        经本地转发
+                      </label>
+                      <button
+                        type="button"
+                        className="mini"
+                        disabled={testing === searchProvider.id}
+                        onClick={() => void testSearch(searchProvider)}
+                      >
+                        {testing === searchProvider.id ? '检索中…' : '测试检索'}
+                      </button>
                     </div>
-                  ))}
-                </div>
+                    <div className="provider-grid">
+                      <label>
+                        <span>API Key</span>
+                        <span className="section-hint">
+                          {deepseekKey(settings)
+                            ? '已复用「模型」页里的 DeepSeek Key，这里不用再填。'
+                            : '还没填。到「模型」页填上 DeepSeek 的 Key，搜索会直接复用。'}
+                        </span>
+                      </label>
+                      <label>
+                        <span>服务地址（可留空）</span>
+                        <input
+                          value={searchProvider.endpoint ?? ''}
+                          placeholder="https://api.deepseek.com/v1"
+                          onChange={(e) => saveSearchProvider({ ...searchProvider, endpoint: e.target.value })}
+                        />
+                      </label>
+                    </div>
+                    {testResult[searchProvider.id] && (
+                      <p className={`test-result ${testResult[searchProvider.id].startsWith('✓') ? 'ok' : 'bad'}`}>
+                        {testResult[searchProvider.id]}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <label className="field">
                   <span>每次取几条结果（1–10）</span>
                   <input
@@ -599,7 +561,10 @@ export function SettingsPanel() {
                     value={settings.search.maxResults}
                     onChange={(e) =>
                       void patchSettings({
-                        search: { ...settings.search, maxResults: Math.max(1, Math.min(10, Number(e.target.value) || 5)) },
+                        search: {
+                          ...settings.search,
+                          maxResults: Math.max(1, Math.min(10, Number(e.target.value) || 5)),
+                        },
                       })
                     }
                   />
@@ -607,11 +572,15 @@ export function SettingsPanel() {
               </section>
 
               <section>
-                <h3>不想再买一个 Key？</h3>
+                <h3>一次查证会发生什么</h3>
+                <ol className="search-steps">
+                  <li>把你的问题压成一条检索式，取回 {settings.search.maxResults} 条结果（带摘要与权威度）。</li>
+                  <li>打开前 3 条结果的正文；官方抓取直接返回 Markdown，失败才回退去扒网页。</li>
+                  <li>只依据这些资料给结论，来源用 [n] 标在正文里，末尾统一列出。</li>
+                </ol>
                 <p className="section-hint">
-                  自建一个 <a href="https://docs.searxng.org/" target="_blank" rel="noreferrer">SearXNG</a>
-                  （Docker 一行就能跑）是免费的、不限量，还能自己选搜索引擎。把实例地址填到上面并把「服务类型」改成
-                  SearXNG 即可。注意：查证时你选中的句子会发给检索服务，介意的话就自建。
+                  用 DeepSeek 模型时，这一步会换成模型的原生联网搜索：它自己决定搜几次、打开哪几页，回答自带角标引用。
+                  检索约 5 元 / 1000 次，实际消耗会记在「用量」页。
                 </p>
               </section>
             </>

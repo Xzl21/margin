@@ -1,12 +1,8 @@
 import type { HighlightKey, NoteCategory, ProviderConfig, SearchProvider, Settings } from '../types'
 
 export const SEARCH_PRESETS: SearchProvider[] = [
-  // DeepSeek 官方搜索：复用「模型」页里的 DeepSeek Key，不用再买第二个服务
-  { id: 'deepseek', name: 'DeepSeek 搜索（官方，用同一个 Key）', kind: 'deepseek', apiKey: '', proxy: true },
-  { id: 'tavily', name: 'Tavily', kind: 'tavily', apiKey: '', proxy: true },
-  { id: 'brave', name: 'Brave Search', kind: 'brave', apiKey: '', proxy: true },
-  { id: 'serper', name: 'Serper（Google）', kind: 'serper', apiKey: '', proxy: true },
-  { id: 'searxng', name: 'SearXNG（自建，免费）', kind: 'searxng', apiKey: '', endpoint: '', proxy: true },
+  // 只保留 DeepSeek 官方搜索：复用「模型」页里的 DeepSeek Key，不用再买第二个服务
+  { id: 'deepseek', name: 'DeepSeek 搜索', kind: 'deepseek', apiKey: '', proxy: true },
 ]
 
 /**
@@ -153,13 +149,9 @@ export function searchProviderById(settings: Settings, id: string): SearchProvid
   return settings.search.providers.find((p) => p.id === id)
 }
 
-/** 检索服务是否可用：DeepSeek 复用模型 Key；searxng 只要有实例地址，其余要 Key。 */
+/** 检索是否可用：DeepSeek 搜索复用「模型」页里的 DeepSeek Key。 */
 export function searchReady(settings: Settings): boolean {
-  const provider = searchProviderById(settings, settings.search.activeId)
-  if (!provider) return false
-  if (provider.kind === 'searxng') return Boolean(provider.endpoint?.trim())
-  if (provider.kind === 'deepseek') return deepseekKey(settings).length > 4
-  return provider.apiKey.trim().length > 8
+  return deepseekKey(settings).length > 4
 }
 
 /** DeepSeek 搜索/抓取用的 Key：优先「模型」页里的 DeepSeek 厂商，其次搜索卡片里自己填的。 */
@@ -169,16 +161,15 @@ export function deepseekKey(settings: Settings): string {
   return (llm?.apiKey ?? '').trim() || (own?.apiKey ?? '').trim()
 }
 
-/** 老版本存下来的检索设置里没有 DeepSeek 这一项，补上；activeId 失效时回退到第一个可用项。 */
+/** 只保留 DeepSeek 搜索这一项，顺手清掉旧版本存下来的 Tavily / Brave / Serper / SearXNG。 */
 export function normalizeSearch(search: Settings['search']): Settings['search'] {
-  const providers = [...(search.providers ?? [])]
-  for (const preset of SEARCH_PRESETS) {
-    if (!providers.some((p) => p.id === preset.id)) providers.push({ ...preset })
+  const own = (search.providers ?? []).find((p) => p.id === 'deepseek')
+  const provider: SearchProvider = { ...SEARCH_PRESETS[0], ...own, kind: 'deepseek', name: SEARCH_PRESETS[0].name }
+  return {
+    providers: [provider],
+    activeId: 'deepseek',
+    maxResults: Math.max(1, Math.min(10, search.maxResults || 5)),
   }
-  const activeId = providers.some((p) => p.id === search.activeId)
-    ? search.activeId
-    : (providers[0]?.id ?? 'deepseek')
-  return { ...search, providers, activeId, maxResults: search.maxResults || 5 }
 }
 
 /**
