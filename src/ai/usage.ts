@@ -21,6 +21,10 @@ export async function recordUsage(input: {
     model: input.model,
     promptTokens: Math.max(0, Math.round(input.usage.promptTokens)),
     completionTokens: Math.max(0, Math.round(input.usage.completionTokens)),
+    cacheTokens: Math.max(0, Math.round(input.usage.cacheTokens ?? 0)),
+    thinkingTokens: Math.max(0, Math.round(input.usage.thinkingTokens ?? 0)),
+    toolSearch: Math.max(0, Math.round(input.usage.toolSearch ?? 0)),
+    toolFetch: Math.max(0, Math.round(input.usage.toolFetch ?? 0)),
     docId: input.docId,
     docTitle: input.docTitle,
   }
@@ -31,10 +35,39 @@ export async function recordUsage(input: {
   }
 }
 
+/**
+ * 价目表（元 / 百万 token，空闲时段；高峰约为两倍）。
+ * $0.75/1000 次搜索与抓取 ≈ 5 元/1000 次，按次折算。
+ */
+const PRICES: Record<string, { hit: number; miss: number; out: number }> = {
+  'deepseek-flash': { hit: 0.02, miss: 1, out: 4 },
+  'deepseek-v4-flash': { hit: 0.02, miss: 1, out: 4 },
+  'deepseek-v4-pro': { hit: 0.15, miss: 4.5, out: 13.5 },
+}
+const TOOL_CALL_PRICE = 5 / 1000
+const FALLBACK_PRICE = PRICES['deepseek-flash']
+
+/** 估算一次调用的花费（元）；不认识的模型返回 null，不硬编一个数字糊弄人。 */
+export function estimateCost(row: UsageRow): number | null {
+  const price = PRICES[row.model] ?? (/^deepseek/i.test(row.model) ? FALLBACK_PRICE : null)
+  if (!price) return null
+  const cached = Math.min(row.cacheTokens ?? 0, row.promptTokens)
+  const fresh = Math.max(0, row.promptTokens - cached)
+  const tokens = (fresh * price.miss + cached * price.hit + row.completionTokens * price.out) / 1_000_000
+  const tools = ((row.toolSearch ?? 0) + (row.toolFetch ?? 0)) * TOOL_CALL_PRICE
+  return tokens + tools
+}
+
 export interface UsageTotals {
   calls: number
   promptTokens: number
   completionTokens: number
+  cacheTokens: number
+  thinkingTokens: number
+  toolCalls: number
+  /** 能估算出价格的调用次数；显示费用时用它判断「有没有数据」 */
+  pricedCalls: number
+  cost: number
 }
 
 export interface UsageBucket extends UsageTotals {
@@ -51,12 +84,29 @@ export interface UsageSummary {
   recent: UsageRow[]
 }
 
-const EMPTY: UsageTotals = { calls: 0, promptTokens: 0, completionTokens: 0 }
+const EMPTY: UsageTotals = {
+  calls: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  cacheTokens: 0,
+  thinkingTokens: 0,
+  toolCalls: 0,
+  pricedCalls: 0,
+  cost: 0,
+}
 
 function add(into: UsageTotals, row: UsageRow): void {
   into.calls += 1
   into.promptTokens += row.promptTokens
   into.completionTokens += row.completionTokens
+  into.cacheTokens += row.cacheTokens ?? 0
+  into.thinkingTokens += row.thinkingTokens ?? 0
+  into.toolCalls += (row.toolSearch ?? 0) + (row.toolFetch ?? 0)
+  const cost = estimateCost(row)
+  if (cost !== null) {
+    into.pricedCalls += 1
+    into.cost += cost
+  }
 }
 
 export async function loadUsage(recentLimit = 60): Promise<UsageSummary> {
@@ -107,6 +157,13 @@ export async function loadUsage(recentLimit = 60): Promise<UsageSummary> {
 
 export async function clearUsage(): Promise<void> {
   await db.usage.clear()
+}
+
+export function formatCost(cost: number): string {
+  if (!cost) return '¥0'
+  if (cost < 0.01) return `¥${cost.toFixed(4)}`
+  if (cost < 1) return `¥${cost.toFixed(3)}`
+  return `¥${cost.toFixed(2)}`
 }
 
 export const TASK_NAME: Record<string, string> = {

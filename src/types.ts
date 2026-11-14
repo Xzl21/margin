@@ -123,6 +123,12 @@ export interface Note {
 
 export type TaskKind = 'explain' | 'concept' | 'verify' | 'critique' | 'map' | 'recap' | 'ask'
 
+/** 思考模式：off 直接答；low / high 先打草稿再答（DeepSeek 专用） */
+export type ThinkingMode = 'off' | 'low' | 'high'
+
+/** 六个用户可感知的 AI 任务（概念复用解释的路由，但思考档位单独可调） */
+export type ThinkingTask = 'explain' | 'concept' | 'ask' | 'verify' | 'critique' | 'map'
+
 /** 一条提问里的单轮消息（提问卡片支持多轮追问） */
 export interface AskTurn {
   role: 'user' | 'assistant'
@@ -153,6 +159,14 @@ export interface UsageRow {
   model: string
   promptTokens: number
   completionTokens: number
+  /** 命中上下文缓存的输入 token（DeepSeek 会回报，单价约为未命中的 1/50） */
+  cacheTokens?: number
+  /** 思考消耗的 token（开了思考模式才有） */
+  thinkingTokens?: number
+  /** 这次调用里计费的联网搜索次数 */
+  toolSearch?: number
+  /** 这次调用里计费的网页抓取次数 */
+  toolFetch?: number
   docId?: string
   docTitle?: string
 }
@@ -184,7 +198,7 @@ export interface ProviderConfig {
   proxy: boolean
 }
 
-export type SearchKind = 'tavily' | 'brave' | 'serper' | 'searxng'
+export type SearchKind = 'deepseek' | 'tavily' | 'brave' | 'serper' | 'searxng'
 
 /** 联网检索服务（给「查证」用）。密钥同样只存在本地。 */
 export interface SearchProvider {
@@ -207,6 +221,8 @@ export interface SearchHit {
   title: string
   url: string
   snippet: string
+  /** DeepSeek 搜索给的 600–800 字长摘要，专门给模型读 */
+  summary?: string
 }
 
 export interface Route {
@@ -217,6 +233,8 @@ export interface Route {
 export interface Settings {
   providers: ProviderConfig[]
   routing: Record<'explain' | 'ask' | 'verify' | 'critique' | 'map', Route>
+  /** 每个任务要不要先「想」再答；只对 DeepSeek 生效，其它厂商会忽略 */
+  thinking: Record<ThinkingTask, ThinkingMode>
   search: SearchSettings
   stance: 'socratic' | 'corrective'
   noSpoiler: boolean

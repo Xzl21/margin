@@ -1,10 +1,13 @@
 import type {
-  Block, Captured, DepMap, Doc, Note, ProviderConfig, SearchHit, Settings,
+  Block, Captured, DepMap, Doc, Note, ProviderConfig, SearchHit, Settings, ThinkingMode, ThinkingTask,
 } from '../types'
 import { providerById, routeReady, searchReady } from './presets'
-import { extractJson, streamChat, type ChatMessage, type TokenUsage } from './client'
+import {
+  extractJson, isDeepSeek, streamChat,
+  type ChatMessage, type StreamInfo, type TokenUsage, type UrlCitation,
+} from './client'
 import { recordUsage } from './usage'
-import { fetchPageText, searchWeb } from './search'
+import { fetchPage, searchWeb } from './search'
 import {
   askMessages,
   buildReadContext,
@@ -14,6 +17,7 @@ import {
   mapMessages,
   normalizeMap,
   verifyMessages,
+  verifyNativeMessages,
 } from './prompts'
 
 export type Task = 'explain' | 'concept' | 'ask' | 'verify' | 'critique' | 'map'
@@ -34,6 +38,11 @@ function ctxFor(doc: Doc, blocks: Block[], blockIdx: number, settings: Settings)
   return buildReadContext(blocks, blockIdx, doc.frontierIdx, settings.noSpoiler)
 }
 
+/** 这个任务该不该先打草稿；老设置里没有 thinking 时默认关掉，保持以前的速度。 */
+function thinkingFor(settings: Settings, task: ThinkingTask): ThinkingMode {
+  return settings.thinking?.[task] ?? 'off'
+}
+
 /** 统一的流式调用：边吐字边收尾，顺带把服务端回报的 token 记到本机用量表。 */
 async function streamTask(
   opts: {
@@ -42,7 +51,10 @@ async function streamTask(
     messages: ChatMessage[]
     proxyBase: string
     temperature?: number
+    thinking?: ThinkingMode
+    tools?: unknown[]
     signal?: AbortSignal
+    onFinal?: (info: StreamInfo) => void
   },
   task: Task,
   doc: Doc,
@@ -80,7 +92,7 @@ export async function runExplain(
     question: input.question,
   })
   return streamTask(
-    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.35 },
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.35, thinking: thinkingFor(input.settings, 'explain') },
     'explain',
     input.doc,
     onDelta,
@@ -100,7 +112,7 @@ export async function runConcept(
     quote: input.captured.quote,
   })
   return streamTask(
-    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2 },
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2, thinking: thinkingFor(input.settings, 'concept') },
     'concept',
     input.doc,
     onDelta,
@@ -136,6 +148,7 @@ export async function runCritique(
       proxyBase: input.settings.proxyBase,
       signal,
       temperature: input.settings.stance === 'socratic' ? 0.6 : 0.3,
+      thinking: thinkingFor(input.settings, 'critique'),
     },
     'critique',
     input.doc,
@@ -143,13 +156,49 @@ export async function runCritique(
   )
 }
 
-/** 联网查证：检索 → 抓正文 → 带编号引用的核查结论。 */
+/** 联网查证：DeepSeek 用原生联网工具（citations 回收出处），其它厂商走「检索 + 抓正文 + 编号引用」。 */
 export async function runVerify(
   input: { doc: Doc; blocks: Block[]; settings: Settings; captured: Captured },
   onDelta: (text: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
   const { provider, model } = routeFor(input.settings, 'verify')
+  const ctx = ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings)
+
+  // DeepSeek 官方：把「可以联网」交给模型，它自己决定搜几次、打开哪几页
+  if (isDeepSeek(provider) && provider.apiKey.trim().length > 4) {
+    let citations: UrlCitation[] = []
+    let out = await streamTask(
+      {
+        provider,
+        model,
+        messages: verifyNativeMessages({ docTitle: input.doc.title, quote: input.captured.quote, ctx }),
+        proxyBase: input.settings.proxyBase,
+        signal,
+        thinking: thinkingFor(input.settings, 'verify'),
+        tools: [{ type: 'deepseek_web_search' }],
+        onFinal: (info) => { citations = info.annotations },
+      },
+      'verify',
+      input.doc,
+      onDelta,
+    )
+    const seen = new Set<string>()
+    const unique = citations.filter((c) => {
+      if (!c.url || seen.has(c.url)) return false
+      seen.add(c.url)
+      return true
+    })
+    const suffix =
+      '\n\n---\n\n**资料来源**\n\n' +
+      (unique.length
+        ? unique.slice(0, 6).map((c, i) => `${i + 1}. [${c.title || c.url}](${c.url})`).join('\n')
+        : '（模型这次没有引用网页：可能是问题不需要联网，或换 `deepseek-flash` 再试）')
+    out += suffix
+    onDelta(suffix)
+    return out
+  }
+
   const online = searchReady(input.settings)
   let hits: SearchHit[] = []
   if (online) {
@@ -160,7 +209,7 @@ export async function runVerify(
   if (hits.length) {
     const picked = hits.slice(0, 3)
     const texts = await Promise.all(
-      picked.map((h) => fetchPageText(h.url, input.settings.proxyBase, signal)),
+      picked.map((h) => fetchPage(input.settings, h.url, signal)),
     )
     picked.forEach((h, i) => {
       const text = texts[i]
@@ -171,14 +220,22 @@ export async function runVerify(
   const messages = verifyMessages({
     docTitle: input.doc.title,
     quote: input.captured.quote,
-    ctx: ctxFor(input.doc, input.blocks, input.captured.blockIdx, input.settings),
+    ctx,
     hits,
     pages,
     online,
   })
 
   let out = await streamTask(
-    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2 },
+    {
+      provider,
+      model,
+      messages,
+      proxyBase: input.settings.proxyBase,
+      signal,
+      temperature: 0.2,
+      thinking: thinkingFor(input.settings, 'verify'),
+    },
     'verify',
     input.doc,
     onDelta,
@@ -221,7 +278,7 @@ export async function runAsk(
   if (hits.length) {
     const picked = hits.slice(0, 3)
     const texts = await Promise.all(
-      picked.map((h) => fetchPageText(h.url, input.settings.proxyBase, signal)),
+      picked.map((h) => fetchPage(input.settings, h.url, signal)),
     )
     picked.forEach((h, i) => {
       const text = texts[i]
@@ -239,7 +296,7 @@ export async function runAsk(
     online,
   })
   let out = await streamTask(
-    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.4 },
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.4, thinking: thinkingFor(input.settings, 'ask') },
     'ask',
     input.doc,
     onDelta,
@@ -270,7 +327,7 @@ export async function runMap(  input: { doc: Doc; blocks: Block[]; settings: Set
   const excerpt = input.blocks.slice(0, 80).map((b) => b.text).join('\n')
   const messages = mapMessages({ docTitle: input.doc.title, outline, excerpt })
   const out = await streamTask(
-    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2 },
+    { provider, model, messages, proxyBase: input.settings.proxyBase, signal, temperature: 0.2, thinking: thinkingFor(input.settings, 'map') },
     'map',
     input.doc,
     () => {},

@@ -65,6 +65,26 @@ const SEARCH_RESULTS = [
   },
 ]
 
+/** 模拟 DeepSeek 官方搜索：多一个 600–800 字的 summary 和权威分 */
+const DEEPSEEK_RESULTS = SEARCH_RESULTS.map((r, i) => ({
+  rerank_score: 2.6 - i * 0.4,
+  title: r.title,
+  url: r.url,
+  snippet: r.content.slice(0, 120),
+  summary: `${r.content} 这段是模拟的 600 字长摘要里的开头部分，真实接口会返回更完整的上下文，供模型直接阅读。`,
+  site_name: ['Nature', 'APA PsycNet', '某科普站'][i] ?? 'mock',
+  authority: 3 - i,
+  date: '2024-05-01',
+}))
+
+const FETCH_CONTENT = `# 工作记忆的容量
+
+工作记忆（working memory）一次能够同时保持和操作的信息量是有限的。早期研究给出的经典数字是 7±2 个组块，后续研究认为实际容量更接近 4 个组块。
+
+- 具体数字依赖材料组织方式与测量方法
+- 学界没有统一铁律
+`
+
 const PAGE_HTML = `<!doctype html><html><head><title>mock page</title></head><body>
 <nav>导航</nav>
 <article>
@@ -106,6 +126,16 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  if (req.method === 'POST' && req.url === '/v1/tools/search') {
+    json(res, 200, { query: 'mock', results: DEEPSEEK_RESULTS })
+    return
+  }
+
+  if (req.method === 'POST' && req.url === '/v1/tools/fetch') {
+    json(res, 200, { title: '工作记忆的容量', content: FETCH_CONTENT })
+    return
+  }
+
   if (req.method === 'GET' && req.url.startsWith('/res/v1/web/search')) {
     json(res, 200, {
       web: {
@@ -132,12 +162,16 @@ const server = http.createServer((req, res) => {
   })
   req.on('end', async () => {
     let messages = []
+    let tools = []
     try {
-      messages = JSON.parse(body).messages ?? []
+      const parsed = JSON.parse(body)
+      messages = parsed.messages ?? []
+      tools = parsed.tools ?? []
     } catch {
       /* ignore */
     }
     const reply = pickReply(messages)
+    const usedTools = tools.some((t) => t?.type === 'deepseek_web_search')
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache',
@@ -148,10 +182,33 @@ const server = http.createServer((req, res) => {
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`)
       await new Promise((r) => setTimeout(r, 12))
     }
+    if (usedTools) {
+      // 模拟最后一块才把完整引用给全
+      res.write(
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                annotations: DEEPSEEK_RESULTS.slice(0, 2).map((r) => ({
+                  type: 'url_citation',
+                  url_citation: { url: r.url, title: r.title, start_index: 0, end_index: 10 },
+                })),
+              },
+            },
+          ],
+        })}\n\n`,
+      )
+    }
     res.write(
       `data: ${JSON.stringify({
         choices: [],
-        usage: { prompt_tokens: 1280, completion_tokens: 96, total_tokens: 1376 },
+        usage: {
+          prompt_tokens: 1280,
+          completion_tokens: 96,
+          prompt_cache_hit_tokens: 1024,
+          completion_tokens_details: { reasoning_tokens: 320 },
+          server_tool_use: { tool_search: usedTools ? 2 : 0, tool_fetch: usedTools ? 1 : 0 },
+        },
       })}\n\n`,
     )
     res.write('data: [DONE]\n\n')

@@ -1,9 +1,11 @@
 // 联网检索：把「这句话到底是不是真的」交给搜索结果，而不是模型记忆。
 // 所有请求都可以经 /api/proxy 转发（检索 API 基本都不允许浏览器直连）。
 import type { SearchHit, SearchProvider, Settings } from '../types'
-import { searchProviderById } from './presets'
+import { deepseekKey, searchProviderById } from './presets'
 
 const MAX_PAGE_CHARS = 2200
+const MAX_DEEPSEEK_PAGE_CHARS = 5000
+const DEEPSEEK_TOOLS_BASE = 'https://api.deepseek.com/v1'
 
 function proxied(url: string, proxyBase: string): string {
   const base = proxyBase.trim().replace(/\/+$/, '')
@@ -126,6 +128,66 @@ async function searxng(
   })).filter((h) => h.url)
 }
 
+async function deepseekSearch(
+  provider: SearchProvider,
+  query: string,
+  n: number,
+  settings: Settings,
+  signal?: AbortSignal,
+): Promise<SearchHit[]> {
+  const key = (deepseekKey(settings) || provider.apiKey).trim()
+  if (!key) {
+    throw new Error('DeepSeek 搜索要用 DeepSeek 的 Key。先到「设置 → 模型」把 DeepSeek 的 Key 填好；官方搜索和模型共用一个 Key。')
+  }
+  const base = provider.endpoint?.trim().replace(/\/+$/, '') || DEEPSEEK_TOOLS_BASE
+  const res = await fetch(target(provider, `${base}/tools/search`, settings.proxyBase), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify({ query, count: n, ori_question: query, need_content: false }),
+    signal,
+  })
+  if (!res.ok) throw await failure('DeepSeek 搜索', res)
+  const json = (await res.json()) as { results?: Array<Record<string, unknown>>; data?: { results?: Array<Record<string, unknown>> } }
+  const rows = json.results ?? json.data?.results ?? []
+  return rows
+    .map((r) => {
+      const summary = clean(r.summary)
+      return {
+        title: clean(r.title) || clean(r.site_name) || clean(r.url),
+        url: clean(r.url),
+        snippet: clean(r.snippet) || summary.slice(0, 180),
+        summary: summary || undefined,
+      }
+    })
+    .filter((h) => h.url)
+}
+
+/** 用官方抓取拿正文（直接是 Markdown，比我们自己扒 HTML 干净）。失败返回空串，外层会回退。 */
+async function deepseekFetch(
+  provider: SearchProvider,
+  settings: Settings,
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const key = (deepseekKey(settings) || provider.apiKey).trim()
+  if (!key) return ''
+  const base = provider.endpoint?.trim().replace(/\/+$/, '') || DEEPSEEK_TOOLS_BASE
+  try {
+    const res = await fetch(target(provider, `${base}/tools/fetch`, settings.proxyBase), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ url }),
+      signal,
+    })
+    if (!res.ok) return ''
+    const json = (await res.json()) as { content?: string }
+    const content = typeof json.content === 'string' ? json.content : ''
+    return content.trim().slice(0, MAX_DEEPSEEK_PAGE_CHARS)
+  } catch {
+    return ''
+  }
+}
+
 export async function searchWeb(settings: Settings, query: string, signal?: AbortSignal): Promise<SearchHit[]> {
   const provider = searchProviderById(settings, settings.search.activeId)
   if (!provider) throw new Error('还没有配置联网检索服务。打开「设置 → 联网」，选一个服务填好 Key。')
@@ -133,6 +195,8 @@ export async function searchWeb(settings: Settings, query: string, signal?: Abor
   const q = query.replace(/\s+/g, ' ').trim().slice(0, 300)
   if (!q) return []
   switch (provider.kind) {
+    case 'deepseek':
+      return deepseekSearch(provider, q, n, settings, signal)
     case 'brave':
       return brave(provider, q, n, settings.proxyBase, signal)
     case 'serper':
@@ -142,6 +206,16 @@ export async function searchWeb(settings: Settings, query: string, signal?: Abor
     default:
       return tavily(provider, q, n, settings.proxyBase, signal)
   }
+}
+
+/** 抓一页正文当证据：DeepSeek 搜索用官方抓取，其它服务仍自己扒 HTML。 */
+export async function fetchPage(settings: Settings, url: string, signal?: AbortSignal): Promise<string> {
+  const provider = searchProviderById(settings, settings.search.activeId)
+  if (provider?.kind === 'deepseek') {
+    const text = await deepseekFetch(provider, settings, url, signal)
+    if (text) return text
+  }
+  return fetchPageText(url, settings.proxyBase, signal)
 }
 
 /** 抓一页正文，给「查证」当证据；失败就当没有，不影响整体。 */

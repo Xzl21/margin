@@ -5,12 +5,30 @@ import { collectChat } from '../ai/client'
 import { searchWeb } from '../ai/search'
 import { docMarkdown, download, exportBundle, importBundle } from '../lib/backup'
 import { uuid } from '../lib/util'
-import type { HighlightKey, NoteCategory, ProviderConfig, SearchKind, SearchProvider, Settings } from '../types'
+import type {
+  HighlightKey, NoteCategory, ProviderConfig, SearchKind, SearchProvider, Settings, ThinkingMode, ThinkingTask,
+} from '../types'
 import { HIGHLIGHT_LABELS } from '../ai/presets'
-import { clearUsage, loadUsage, TASK_NAME, type UsageSummary } from '../ai/usage'
+import { clearUsage, estimateCost, formatCost, loadUsage, TASK_NAME, type UsageSummary } from '../ai/usage'
 
 type Tab = 'models' | 'colors' | 'reading' | 'search' | 'usage' | 'data'
 type TaskKey = keyof Settings['routing']
+
+/** 思考档位：解释/概念/提问默认不思考，点评/查证/路线默认认真想 */
+const THINK_TASKS: { key: ThinkingTask; label: string }[] = [
+  { key: 'explain', label: '划词解释' },
+  { key: 'concept', label: '概念速释' },
+  { key: 'ask', label: '划词提问' },
+  { key: 'verify', label: '查证' },
+  { key: 'critique', label: '批注点评' },
+  { key: 'map', label: '依赖骨架' },
+]
+
+const THINK_OPTIONS: { value: ThinkingMode; label: string }[] = [
+  { value: 'off', label: '直接答（最快）' },
+  { value: 'low', label: '想一下（低）' },
+  { value: 'high', label: '认真想（高）' },
+]
 
 const HIGHLIGHT_KEYS: HighlightKey[] = ['note', 'ask', 'mark', 'verify-ok', 'verify-unknown']
 
@@ -203,7 +221,7 @@ export function SettingsPanel() {
               <section>
                 <h3>任务用哪个模型</h3>
                 <p className="section-hint">
-                  四个任务可以各用各的模型。便宜的模型（deepseek-flash）做解释足够；骨架和点评可以换成更强的 deepseek-v4-pro。
+                  五个任务可以各用各的模型。便宜的模型（deepseek-flash）做解释足够；骨架和点评可以换成更强的 deepseek-v4-pro。
                 </p>
                 <div className="route-grid">
                   {(Object.keys(TASK_LABEL) as TaskKey[]).map((key) => {
@@ -248,6 +266,33 @@ export function SettingsPanel() {
                       </label>
                     )
                   })}
+                </div>
+              </section>
+
+              <section>
+                <h3>要不要先「想」再答</h3>
+                <p className="section-hint">
+                  只对 DeepSeek 生效。关掉思考＝直接答，快且便宜；开启会先打草稿再回答，判断更稳但更慢、更贵（思考 token 也算钱）。开启后 temperature 等参数会被服务端忽略。
+                </p>
+                <div className="route-grid">
+                  {THINK_TASKS.map(({ key, label }) => (
+                    <label key={key} className="route-row">
+                      <span>{label}</span>
+                      <select
+                        value={settings.thinking[key] ?? 'off'}
+                        onChange={(e) => {
+                          void patchSettings({
+                            thinking: { ...settings.thinking, [key]: e.target.value as ThinkingMode },
+                          })
+                        }}
+                      >
+                        {THINK_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      <span />
+                    </label>
+                  ))}
                 </div>
               </section>
 
@@ -503,7 +548,8 @@ export function SettingsPanel() {
                               saveSearchProvider({ ...provider, kind: e.target.value as SearchKind })
                             }
                           >
-                            <option value="tavily">Tavily（推荐，专为模型设计）</option>
+                            <option value="deepseek">DeepSeek 搜索（用同一个 Key）</option>
+                            <option value="tavily">Tavily（专为模型设计）</option>
                             <option value="brave">Brave Search</option>
                             <option value="serper">Serper（Google 结果）</option>
                             <option value="searxng">SearXNG（自建，免费）</option>
@@ -517,6 +563,11 @@ export function SettingsPanel() {
                               placeholder="https://searx.be"
                               onChange={(e) => saveSearchProvider({ ...provider, endpoint: e.target.value })}
                             />
+                          </label>
+                        ) : provider.kind === 'deepseek' ? (
+                          <label>
+                            <span>API Key</span>
+                            <span className="section-hint">复用「模型」页里 DeepSeek 的 Key，这里不用再填。</span>
                           </label>
                         ) : (
                           <label>
@@ -672,6 +723,10 @@ export function SettingsPanel() {
                           <span className="usage-sub">
                             输入 {fmtTokens(t.promptTokens)} · 输出 {fmtTokens(t.completionTokens)} · {t.calls} 次
                           </span>
+                          <span className="usage-sub">
+                            缓存命中 {fmtTokens(t.cacheTokens)} · 思考 {fmtTokens(t.thinkingTokens)} · 联网 {t.toolCalls} 次
+                          </span>
+                          <span className="usage-cost">{t.pricedCalls ? formatCost(t.cost) : '—'}</span>
                         </div>
                       ))}
                     </div>
@@ -683,7 +738,9 @@ export function SettingsPanel() {
                           <th>功能</th>
                           <th>次数</th>
                           <th>输入</th>
+                          <th>缓存</th>
                           <th>输出</th>
+                          <th>费用</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -692,7 +749,9 @@ export function SettingsPanel() {
                             <td>{TASK_NAME[row.key] ?? row.key}</td>
                             <td>{row.calls}</td>
                             <td>{fmtTokens(row.promptTokens)}</td>
+                            <td>{fmtTokens(row.cacheTokens)}</td>
                             <td>{fmtTokens(row.completionTokens)}</td>
+                            <td>{row.pricedCalls ? formatCost(row.cost) : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -705,7 +764,10 @@ export function SettingsPanel() {
                           <th>模型</th>
                           <th>次数</th>
                           <th>输入</th>
+                          <th>缓存</th>
+                          <th>思考</th>
                           <th>输出</th>
+                          <th>费用</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -714,7 +776,10 @@ export function SettingsPanel() {
                             <td>{row.label}</td>
                             <td>{row.calls}</td>
                             <td>{fmtTokens(row.promptTokens)}</td>
+                            <td>{fmtTokens(row.cacheTokens)}</td>
+                            <td>{fmtTokens(row.thinkingTokens)}</td>
                             <td>{fmtTokens(row.completionTokens)}</td>
+                            <td>{row.pricedCalls ? formatCost(row.cost) : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -728,7 +793,11 @@ export function SettingsPanel() {
                           <th>功能</th>
                           <th>模型</th>
                           <th>输入</th>
+                          <th>缓存</th>
+                          <th>思考</th>
                           <th>输出</th>
+                          <th>联网</th>
+                          <th>费用</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -738,14 +807,19 @@ export function SettingsPanel() {
                             <td>{TASK_NAME[row.task] ?? row.task}</td>
                             <td>{row.model}</td>
                             <td>{fmtTokens(row.promptTokens)}</td>
+                            <td>{fmtTokens(row.cacheTokens ?? 0)}</td>
+                            <td>{fmtTokens(row.thinkingTokens ?? 0)}</td>
                             <td>{fmtTokens(row.completionTokens)}</td>
+                            <td>{(row.toolSearch ?? 0) + (row.toolFetch ?? 0) || ''}</td>
+                            <td>{estimateCost(row) !== null ? formatCost(estimateCost(row) ?? 0) : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
 
                     <p className="section-hint">
-                      这里只统计 token，不换算金额：各家单价不同，按你手上的价目表乘一下即可。记录只在本浏览器，换设备不会带过去。
+                      费用是估算：按 DeepSeek 公开价目（空闲时段）折算，高峰约两倍；搜索/抓取按 5 元/1000 次计。缓存命中是最省的一项，只有本来就便宜的那部分才算；不认识的模型显示「—」，不硬编一个数字。
+                      记录只在本浏览器，换设备不会带过去。
                     </p>
                     <button
                       type="button"

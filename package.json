@@ -1,7 +1,7 @@
 {
   "name": "margin-reader",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "伴读 Margin — 本地优先的学习型文档阅读器",
   "license": "MIT",

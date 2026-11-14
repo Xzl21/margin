@@ -168,6 +168,7 @@ check('ask tab before mark', tabs.findIndex((t) => /^提问/.test(t)) < tabs.fin
       const text = doc.body.textContent ?? ''
       check('search settings render', /Tavily/.test(text) && /查证/.test(text), text.replace(/\s+/g, ' ').slice(0, 60))
       check('search provider cards', doc.querySelectorAll('.provider-card').length >= 4)
+      check('deepseek search source present', /DeepSeek 搜索/.test(text))
     }
 
     const modelsTab = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '模型')
@@ -175,6 +176,8 @@ check('ask tab before mark', tabs.findIndex((t) => /^提问/.test(t)) < tabs.fin
       modelsTab.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
       await wait(200)
       check('only deepseek preset', doc.querySelectorAll('.provider-card').length === 1, String(doc.querySelectorAll('.provider-card').length))
+      check('thinking rows present', /要不要先/.test(doc.body.textContent ?? ''))
+      check('thinking selects rendered', doc.querySelectorAll('.route-grid select').length >= 11, String(doc.querySelectorAll('.route-grid select').length))
     }
 
     const usageTab = [...doc.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '用量')

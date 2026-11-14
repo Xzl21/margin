@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie'
 import type { AiMsg, Anchor, Ask, Block, CacheRow, Doc, Folder, Note, Route, Settings, UsageRow } from './types'
 import {
-  defaultSettings, LEGACY_NOTE_KINDS, normalizeNoteCategories, pruneProviders, upgradeLegacyModels,
+  defaultSettings, LEGACY_NOTE_KINDS, normalizeNoteCategories, normalizeSearch, pruneProviders, upgradeLegacyModels,
 } from './ai/presets'
 
 export class MarginDB extends Dexie {
@@ -95,11 +95,13 @@ export async function loadSettings(): Promise<Settings | undefined> {
       critique: storedRouting.critique ?? base.routing.critique,
       map: storedRouting.map ?? base.routing.map,
     },
-    search: {
+    search: normalizeSearch({
       ...base.search,
       ...(stored.search ?? {}),
       providers: stored.search?.providers?.length ? stored.search.providers : base.search.providers,
-    },
+    }),
+    // 后加的思考档位：缺哪一项就用默认（解释/概念/提问关，点评/查证/路线高）
+    thinking: { ...base.thinking, ...(stored.thinking ?? {}) },
     noteCategories: normalizeNoteCategories(stored.noteCategories),
     highlightColors: { ...base.highlightColors, ...(stored.highlightColors ?? {}) },
   }
