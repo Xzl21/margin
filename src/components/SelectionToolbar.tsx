@@ -24,7 +24,10 @@ export function SelectionToolbar({
     // 长选区（跨多段）的联合矩形可能高过屏幕，顶部跑到视口外，浮窗就“消失”了。
     // 改成贴住选区最后一行：它一定在屏幕上，也正好是鼠标松开的位置。
     const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0)
-    const anchor = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect()
+    // 只取还在视口里的行：键盘连选超出屏幕时，最后一行可能已经在视口外
+    const visible = rects.filter((r) => r.bottom > 0 && r.top < window.innerHeight)
+    const pool = visible.length ? visible : rects
+    const anchor = pool.length ? pool[pool.length - 1] : range.getBoundingClientRect()
     if (!anchor || (anchor.width === 0 && anchor.height === 0)) return
     const half = 190
     const x = Math.min(Math.max(anchor.left + anchor.width / 2, half), window.innerWidth - half)
